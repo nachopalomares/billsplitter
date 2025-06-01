@@ -34,6 +34,15 @@
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 
+     <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JS -->
+    <script src="assets/js/participant-handler.js"></script>
+    
+    <!-- Page-specific scripts -->
+    <?php if (isset($page_scripts)) echo $page_scripts; ?>
+
     <style>
         /* Fix for white space at bottom of page */
         html, body {

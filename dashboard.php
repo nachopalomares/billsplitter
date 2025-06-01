@@ -128,7 +128,7 @@ closeDbConnection($conn);
 
 <?php include 'includes/header.php'; ?>
 
-<div class="container mt-5">
+<div class="container mt-4">
     <div class="d-flex justify-content-between align-items-center mb-4">
         <h1>My Bills</h1>
         <a href="upload_receipt.php" class="btn btn-primary">

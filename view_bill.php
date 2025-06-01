@@ -143,7 +143,7 @@ closeDbConnection($conn);
     }
 </style>
 
-<div class="container mt-5">
+<div class="container mt-4">
     <!-- Botones de acción superiores -->
     <div class="row mb-4 no-print">
         <div class="col-12">
