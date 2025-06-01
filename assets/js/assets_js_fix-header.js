@@ -1,7 +1,3 @@
-/**
- * Fix header overlap issue for fixed navbar
- * Dynamically adjusts body padding based on actual navbar height
- */
 document.addEventListener('DOMContentLoaded', function() {
     function adjustBodyPadding() {
         const navbar = document.querySelector('.navbar.fixed-top');
@@ -23,8 +19,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Adjust after fonts and all resources are loaded (they can change navbar height)
     window.addEventListener('load', adjustBodyPadding);
-    
-    // Optional: Observe navbar for dynamic height changes
+
     if (window.ResizeObserver) {
         const navbar = document.querySelector('.navbar.fixed-top');
         if (navbar) {
