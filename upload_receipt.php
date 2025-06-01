@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                         </div>
                         <div class="card-body text-center">
                             <?php 
-                            // Debug: mostrar información de la imagen
+                            
                             $imagePath = UPLOAD_DIR . $uploadedImage;
                             $webPath = 'uploads/' . $uploadedImage;
                             
@@ -202,13 +202,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                                      onerror="this.style.display='none'; document.getElementById('image-error').style.display='block';">
                                 
                                 <div id="image-error" style="display: none;" class="alert alert-warning mt-2">
-                                    <i class="bi bi-exclamation-triangle"></i> No se pudo cargar la imagen
+                                    <i class="bi bi-exclamation-triangle"></i> Image could not be loaded
                                 </div>
                             <?php else: ?>
                                 <div class="alert alert-warning">
-                                    <i class="bi bi-exclamation-triangle"></i> Archivo de imagen no encontrado
+                                    <i class="bi bi-exclamation-triangle"></i> Image file not found
                                 </div>
-                                <p class="text-muted">Ruta esperada: <?php echo htmlspecialchars($imagePath); ?></p>
+                                <p class="text-muted">Expected path: <?php echo htmlspecialchars($imagePath); ?></p>
                             <?php endif; ?>
                             <p class="text-muted mt-2">Use this image as reference to enter the items manually</p>
                         </div>
@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
-/* Solución simple y estable para el sticky receipt */
+/* Simple and stable solution for sticky receipt */
 @media (min-width: 768px) {
     .receipt-image-container {
         position: sticky;
@@ -396,7 +396,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 }
 
-/* En pantallas pequeñas, comportamiento normal */
+/* On small screens, normal behavior */
 @media (max-width: 767px) {
     .receipt-image-container {
         position: static;
@@ -408,16 +408,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 }
 
-/* Mejorar el espaciado en el formulario */
+/* Improve spacing in the form */
 .item-row {
     align-items: center;
 }
 
 .item-row .btn {
-    height: 38px; /* Mismo altura que los inputs */
+    height: 38px; /* Same height as inputs */
 }
 
-/* Mejorar contraste de texto */
+/* Improve text contrast */
 .card-header {
     border-bottom: 1px solid rgba(0,0,0,0.125);
 }

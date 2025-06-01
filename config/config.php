@@ -10,8 +10,8 @@ define('DB_PASS', '');
 define('DB_NAME', 'bill_splitter');
 
 // Upload configuration
-define('UPLOAD_DIR', __DIR__ . '/../uploads/'); // Ruta absoluta del servidor
-define('UPLOAD_WEB_PATH', 'uploads/'); // Ruta relativa para el navegador
+define('UPLOAD_DIR', __DIR__ . '/../uploads/'); 
+define('UPLOAD_WEB_PATH', 'uploads/'); 
 
 // Session configuration
 ini_set('session.cookie_httponly', 1);

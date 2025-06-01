@@ -417,12 +417,12 @@ closeDbConnection($conn);
 function copyBillLink() {
     const urlInput = document.getElementById('bill-url');
     urlInput.select();
-    urlInput.setSelectionRange(0, 99999); // Para móviles
+    urlInput.setSelectionRange(0, 99999); // For mobile devices
     
     try {
         document.execCommand('copy');
         
-        // Mostrar feedback visual
+        // Show visual feedback
         const button = event.target.closest('button');
         const originalHTML = button.innerHTML;
         button.innerHTML = '<i class="bi bi-check"></i>';
@@ -441,25 +441,25 @@ function copyBillLink() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Inicializar comportamiento de collapse manualmente
+    // Initialize collapse behavior manually
     const itemsCollapseElement = document.getElementById('itemsDetail');
     const collapseToggle = document.querySelector('[data-bs-target="#itemsDetail"]');
     const chevronIcon = collapseToggle.querySelector('.bi-chevron-down');
     
-    // Crear instancia de collapse con Bootstrap
+    // Create collapse instance with Bootstrap
     const itemsCollapse = new bootstrap.Collapse(itemsCollapseElement, {
         toggle: false
     });
     
-    // Mostrar elementos si no hay participantes
+    // Show items if there are no participants
     const participantCount = <?php echo count($participants); ?>;
     if (participantCount === 0) {
         itemsCollapse.show();
     }
     
-    // Añadir listener personalizado para actualizar el icono
+    // Add custom listener to update icon
     collapseToggle.addEventListener('click', function() {
-        // Verificar si el elemento está colapsado o no
+        // Check if element is collapsed or not
         const isCollapsed = itemsCollapseElement.classList.contains('show');
         
         if (isCollapsed) {
@@ -473,7 +473,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Actualizar icono según el estado inicial
+    // Update icon based on initial state
     if (itemsCollapseElement.classList.contains('show')) {
         chevronIcon.classList.remove('bi-chevron-down');
         chevronIcon.classList.add('bi-chevron-up');

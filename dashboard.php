@@ -249,16 +249,16 @@ document.addEventListener('DOMContentLoaded', function() {
             body: formData
         })
         .then(response => {
-            // Verificar si la respuesta es válida
+            // Check if the response is valid
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
             
-            // Obtener el texto de la respuesta para debugging
+            // Get the response text for debugging
             return response.text();
         })
         .then(text => {
-            console.log('Response text:', text); // Para debugging
+            console.log('Response text:', text); // For debugging
             
             try {
                 const data = JSON.parse(text);

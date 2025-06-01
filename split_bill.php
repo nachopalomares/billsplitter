@@ -241,7 +241,7 @@ closeDbConnection($conn);
 
 <?php include 'includes/header.php'; ?>
 
-<!-- Estilos optimizados -->
+<!-- Optimized styles -->
 <style>
     .sticky-summary {
         position: sticky;
@@ -276,7 +276,7 @@ closeDbConnection($conn);
         }
     }
     
-    /* Participantes compactos */
+    /* Compact participants */
     .participants-compact {
         background: #f8f9fa;
         border: 1px solid #dee2e6;
@@ -306,7 +306,7 @@ closeDbConnection($conn);
         opacity: 1;
     }
     
-    /* Botón de borrar discreto */
+    /* Discreet delete button */
     .remove-btn {
         background: none;
         border: none;
@@ -357,25 +357,6 @@ closeDbConnection($conn);
         top: 20px;
         z-index: 1020;
     }
-    
-    @media (max-width: 991.98px) {
-        .sticky-sidebar {
-            position: relative;
-            top: auto;
-        }
-    }
-    .badge.bg-light {
-        color: #212529 !important; /* Ensure dark text on light backgrounds */
-    }
-
-    .badge.bg-primary, .badge.bg-success, .badge.bg-danger {
-        color: white !important; /* Ensure white text on dark backgrounds */
-    }
-
-    .bg-light {
-        color: #212529 !important;
-    }
-    
 </style>
 
 <div class="container mt-5">
@@ -717,7 +698,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const billId = <?php echo $billId; ?>;
     let currentItemId = null;
     
-    // Función para hacer peticiones AJAX
+    // Function to make AJAX requests
     const makeRequest = async (action, data = {}) => {
         const formData = new FormData();
         formData.append('action', action);
@@ -742,7 +723,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
     
-    // Agregar participante
+    // Add participant
     document.getElementById('saveParticipantBtn').addEventListener('click', async function() {
         const name = document.getElementById('participantName').value.trim();
         const email = document.getElementById('participantEmail').value.trim();
@@ -755,14 +736,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const data = await makeRequest('add_participant', { name, email });
         
         if (data.success) {
-            // Simplemente recargar la página en lugar de actualizar el DOM
+            // Simply reload the page instead of updating the DOM
             location.reload();
         } else {
             alert('Failed to add participant');
         }
     });
     
-    // Función para agregar participante al DOM
+    // Function to add participant to DOM
     const addParticipantToDOM = (participant) => {
         const noParticipantsMsg = document.getElementById('noParticipantsMsg');
         if (noParticipantsMsg) {
@@ -789,7 +770,7 @@ document.addEventListener('DOMContentLoaded', function() {
         `;
         participantsList.appendChild(newParticipantItem);
         
-        // Agregar al modal de asignación
+        // Add to assignment modal
         const assignList = document.getElementById('assignParticipantsList');
         const checkboxDiv = document.createElement('div');
         checkboxDiv.className = 'form-check';
