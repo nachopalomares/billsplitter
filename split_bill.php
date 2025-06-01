@@ -1,0 +1,937 @@
+<?php
+require_once 'config/config.php';
+require_once 'config/db_connect.php';
+require_once 'includes/functions.php';
+
+// Require login
+requireLogin();
+
+// Check if bill ID is provided
+if (!isset($_GET['id']) || !is_numeric($_GET['id'])) {
+    header("Location: dashboard.php");
+    exit;
+}
+
+$billId = (int)$_GET['id'];
+$userId = $_SESSION['user_id'];
+
+// Get database connection
+$conn = getDbConnection();
+
+// Verify that the bill belongs to the user
+$stmt = $conn->prepare("SELECT * FROM bills WHERE bill_id = ? AND user_id = ?");
+$stmt->bind_param("ii", $billId, $userId);
+$stmt->execute();
+$result = $stmt->get_result();
+
+if ($result->num_rows !== 1) {
+    $stmt->close();
+    closeDbConnection($conn);
+    header("Location: dashboard.php");
+    exit;
+}
+
+$bill = $result->fetch_assoc();
+$stmt->close();
+
+// Get bill items
+$stmt = $conn->prepare("SELECT * FROM bill_items WHERE bill_id = ? ORDER BY item_id");
+$stmt->bind_param("i", $billId);
+$stmt->execute();
+$result = $stmt->get_result();
+$items = $result->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+// Get participants
+$stmt = $conn->prepare("SELECT * FROM participants WHERE bill_id = ? ORDER BY participant_id");
+$stmt->bind_param("i", $billId);
+$stmt->execute();
+$result = $stmt->get_result();
+$participants = $result->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+// Get item assignments
+$stmt = $conn->prepare("
+    SELECT ia.*, p.name as participant_name, p.participant_id
+    FROM item_assignments ia 
+    JOIN participants p ON ia.participant_id = p.participant_id
+    WHERE p.bill_id = ?
+");
+$stmt->bind_param("i", $billId);
+$stmt->execute();
+$result = $stmt->get_result();
+$assignments = $result->fetch_all(MYSQLI_ASSOC);
+$stmt->close();
+
+// Process assignment data for easy access
+$itemAssignments = [];
+foreach ($assignments as $assignment) {
+    if (!isset($itemAssignments[$assignment['item_id']])) {
+        $itemAssignments[$assignment['item_id']] = [];
+    }
+    $itemAssignments[$assignment['item_id']][] = [
+        'participant_id' => $assignment['participant_id'],
+        'participant_name' => $assignment['participant_name'],
+        'share_percentage' => $assignment['share_percentage']
+    ];
+}
+
+// Calculate amount due for each participant
+function calculateParticipantAmounts($items, $participants, $assignments) {
+    $participantAmounts = [];
+    
+    // Initialize amounts to 0 for all participants
+    foreach ($participants as $participant) {
+        $participantAmounts[$participant['participant_id']] = [
+            'name' => $participant['name'],
+            'amount' => 0
+        ];
+    }
+    
+    // Calculate amounts based on assignments
+    foreach ($assignments as $assignment) {
+        // Find the item
+        $item = null;
+        foreach ($items as $i) {
+            if ($i['item_id'] == $assignment['item_id']) {
+                $item = $i;
+                break;
+            }
+        }
+        
+        if ($item && isset($participantAmounts[$assignment['participant_id']])) {
+            $shareAmount = ($item['price'] * $assignment['share_percentage']) / 100;
+            $participantAmounts[$assignment['participant_id']]['amount'] += $shareAmount;
+        }
+    }
+    
+    return $participantAmounts;
+}
+
+$participantAmounts = calculateParticipantAmounts($items, $participants, $assignments);
+
+// Handle AJAX requests
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    $response = ['success' => false];
+    
+    switch ($_POST['action']) {
+        case 'add_participant':
+            if (isset($_POST['name']) && !empty(trim($_POST['name']))) {
+                $name = trim($_POST['name']);
+                $email = isset($_POST['email']) ? trim($_POST['email']) : null;
+                
+                $stmt = $conn->prepare("INSERT INTO participants (bill_id, name, email) VALUES (?, ?, ?)");
+                $stmt->bind_param("iss", $billId, $name, $email);
+                
+                if ($stmt->execute()) {
+                    $response = [
+                        'success' => true,
+                        'participant' => [
+                            'participant_id' => $conn->insert_id,
+                            'name' => $name,
+                            'email' => $email
+                        ]
+                    ];
+                }
+                $stmt->close();
+            }
+            break;
+            
+        case 'remove_participant':
+            if (isset($_POST['participant_id']) && is_numeric($_POST['participant_id'])) {
+                $participantId = (int)$_POST['participant_id'];
+                
+                $stmt = $conn->prepare("DELETE FROM participants WHERE participant_id = ? AND bill_id = ?");
+                $stmt->bind_param("ii", $participantId, $billId);
+                
+                if ($stmt->execute()) {
+                    $response = ['success' => true];
+                }
+                $stmt->close();
+            }
+            break;
+            
+        case 'assign_item':
+            if (isset($_POST['item_id']) && is_numeric($_POST['item_id']) && 
+                isset($_POST['participant_ids']) && is_array($_POST['participant_ids'])) {
+                
+                $itemId = (int)$_POST['item_id'];
+                $participantIds = array_filter($_POST['participant_ids'], 'is_numeric');
+                
+                // Begin transaction
+                $conn->begin_transaction();
+                
+                try {
+                    // Remove existing assignments
+                    $stmt = $conn->prepare("
+                        DELETE ia FROM item_assignments ia
+                        JOIN participants p ON ia.participant_id = p.participant_id
+                        WHERE ia.item_id = ? AND p.bill_id = ?
+                    ");
+                    $stmt->bind_param("ii", $itemId, $billId);
+                    $stmt->execute();
+                    $stmt->close();
+                    
+                    // Add new assignments
+                    if (!empty($participantIds)) {
+                        $sharePercentage = 100 / count($participantIds);
+                        $stmt = $conn->prepare("INSERT INTO item_assignments (item_id, participant_id, share_percentage) VALUES (?, ?, ?)");
+                        
+                        foreach ($participantIds as $participantId) {
+                            $stmt->bind_param("iid", $itemId, $participantId, $sharePercentage);
+                            $stmt->execute();
+                        }
+                        $stmt->close();
+                    }
+                    
+                    $conn->commit();
+                    $response = ['success' => true];
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $response = ['success' => false, 'error' => $e->getMessage()];
+                }
+            }
+            break;
+            
+        case 'split_evenly':
+            if (!empty($participants)) {
+                $conn->begin_transaction();
+                
+                try {
+                    // Clear all existing assignments
+                    $stmt = $conn->prepare("
+                        DELETE ia FROM item_assignments ia
+                        JOIN participants p ON ia.participant_id = p.participant_id
+                        WHERE p.bill_id = ?
+                    ");
+                    $stmt->bind_param("i", $billId);
+                    $stmt->execute();
+                    $stmt->close();
+                    
+                    // Create new assignments
+                    $sharePercentage = 100 / count($participants);
+                    $stmt = $conn->prepare("INSERT INTO item_assignments (item_id, participant_id, share_percentage) VALUES (?, ?, ?)");
+                    
+                    foreach ($items as $item) {
+                        foreach ($participants as $participant) {
+                            $stmt->bind_param("iid", $item['item_id'], $participant['participant_id'], $sharePercentage);
+                            $stmt->execute();
+                        }
+                    }
+                    
+                    $stmt->close();
+                    $conn->commit();
+                    $response = ['success' => true];
+                } catch (Exception $e) {
+                    $conn->rollback();
+                    $response = ['success' => false, 'error' => $e->getMessage()];
+                }
+            }
+            break;
+    }
+    
+    closeDbConnection($conn);
+    header('Content-Type: application/json');
+    echo json_encode($response);
+    exit;
+}
+
+closeDbConnection($conn);
+?>
+
+<?php include 'includes/header.php'; ?>
+
+<!-- Estilos optimizados -->
+<style>
+    .sticky-summary {
+        position: sticky;
+        top: 20px;
+        z-index: 1020;
+    }
+    
+    @media (max-width: 991.98px) {
+        .sticky-summary {
+            position: relative;
+            top: auto;
+        }
+    }
+    
+    .amount-summary-card {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border: 2px solid #28a745;
+    }
+    
+    .floating-total {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 1030;
+        min-width: 200px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+    
+    @media (min-width: 992px) {
+        .floating-total {
+            display: none;
+        }
+    }
+    
+    /* Participantes compactos */
+    .participants-compact {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 15px;
+    }
+    
+    .participant-chip {
+        display: inline-flex;
+        align-items: center;
+        background: white;
+        border: 1px solid #dee2e6;
+        border-radius: 20px;
+        padding: 6px 12px;
+        margin: 3px;
+        font-size: 0.9rem;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    
+    .participant-chip:hover {
+        background: #f8f9fa;
+        border-color: #adb5bd;
+    }
+    
+    .participant-chip:hover .remove-btn {
+        opacity: 1;
+    }
+    
+    /* Botón de borrar discreto */
+    .remove-btn {
+        background: none;
+        border: none;
+        color: #dc3545;
+        font-size: 12px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        margin-left: 6px;
+        opacity: 0;
+        transition: all 0.2s ease;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
+    
+    .remove-btn:hover {
+        background: #dc3545;
+        color: white;
+        opacity: 1 !important;
+    }
+    
+    .participant-amount {
+        font-weight: 600;
+        color: #28a745;
+        margin-left: 6px;
+    }
+    
+    .participants-header-compact {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+    
+    .no-participants-compact {
+        text-align: center;
+        color: #6c757d;
+        font-style: italic;
+        padding: 20px 0;
+    }
+    
+    .sticky-sidebar {
+        position: -webkit-sticky;
+        position: sticky;
+        top: 20px;
+        z-index: 1020;
+    }
+    
+    @media (max-width: 991.98px) {
+        .sticky-sidebar {
+            position: relative;
+            top: auto;
+        }
+    }
+    .badge.bg-light {
+        color: #212529 !important; /* Ensure dark text on light backgrounds */
+    }
+
+    .badge.bg-primary, .badge.bg-success, .badge.bg-danger {
+        color: white !important; /* Ensure white text on dark backgrounds */
+    }
+
+    .bg-light {
+        color: #212529 !important;
+    }
+    
+</style>
+
+<div class="container mt-4">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
+            <li class="breadcrumb-item active text-muted">Bill Details</li>
+        </ol>
+    </nav>
+
+    <!-- Información de la factura -->
+    <div class="row mb-4 ">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h2 class="mb-0"><?php echo htmlspecialchars($bill['restaurant_name'] ?? 'Restaurant'); ?></h2>
+                        <div class="badge bg-light text-primary fs-5">
+                            <?php echo formatCurrency($bill['total_amount']); ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong><i class="bi bi-calendar3"></i> Date:</strong> 
+                               <?php echo date('M d, Y', strtotime($bill['bill_date'] ?? $bill['created_at'])); ?>
+                            </p>
+                            <?php if (!empty($bill['notes'])): ?>
+                            <p><strong><i class="bi bi-sticky"></i> Notes:</strong> 
+                               <?php echo htmlspecialchars($bill['notes']); ?>
+                            </p>
+                            <?php endif; ?>
+                        </div>
+                        <div class="col-md-6 text-md-end">
+                            <p class="mb-0"><strong>Bill #:</strong> <?php echo $billId; ?></p>
+                            <p><strong>Items:</strong> <?php echo count($items); ?></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card bg-dark">
+                <div class="card-body">
+                    <h4 class="card-title"><i class="bi bi-scissors"></i> Bill Splitting</h4>
+                    <p class="card-text">Assign items to participants to calculate how much each person owes.</p>
+                    <div class="d-grid">
+                        <button id="splitEvenlyBtn" class="btn btn-success">
+                            <i class="bi bi-people-fill"></i> Split All Items Evenly
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-lg-8">
+            <!-- Imagen del ticket -->
+            <?php if (!empty($bill['receipt_image'])): ?>
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h4>Receipt Image</h4>
+                </div>
+                <div class="card-body text-center">
+                    <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                         alt="Receipt" 
+                         class="img-fluid" 
+                         style="max-height: 500px; cursor: pointer;"
+                         data-bs-toggle="modal" 
+                         data-bs-target="#receiptModal">
+                    <p class="text-muted mt-2">Click to enlarge</p>
+                </div>
+            </div>
+            <?php endif; ?>
+            
+            <!-- Items de la factura -->
+            <div class="card mb-4">
+                <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                    <h3 class="mb-0 text-info"><i class="bi bi-list-check"></i> Bill Items</h3>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Item</th>
+                                    <th>Price</th>
+                                    <th>Assigned To</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($items as $item): ?>
+                                <tr>
+                                    <td class="fw-bold"><?php echo htmlspecialchars($item['item_name']); ?></td>
+                                    <td><?php echo formatCurrency($item['price']); ?></td>
+                                    <td class="assigned-to" data-item-id="<?php echo $item['item_id']; ?>">
+                                        <?php 
+                                        if (isset($itemAssignments[$item['item_id']])) {
+                                            $names = array_map(function($a) { 
+                                                return htmlspecialchars($a['participant_name']); 
+                                            }, $itemAssignments[$item['item_id']]);
+                                            
+                                            foreach ($names as &$name) {
+                                                $name = '<span class="badge bg-primary text-white">' . $name . '</span>';
+                                            }
+                                            
+                                            echo implode(' ', $names);
+                                        } else {
+                                            echo '<span class="badge bg-light text-muted">Unassigned</span>';
+                                        }
+                                        ?>
+                                    </td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-primary assign-item" 
+                                                data-item-id="<?php echo $item['item_id']; ?>"
+                                                data-item-name="<?php echo htmlspecialchars($item['item_name']); ?>"
+                                                data-bs-toggle="modal" data-bs-target="#assignItemModal">
+                                            <i class="bi bi-person-plus"></i> Assign
+                                        </button>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Panel lateral con participantes y resumen de cantidades -->
+        <div class="col-lg-4">
+            <div class="sticky-sidebar">
+                <!-- Sección de Participantes -->
+                <div class="card mb-4">
+                    <div class="card-header bg-info text-white">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <h4 class="mb-0">
+                                <i class="bi bi-people"></i> Participants (<span id="participantCount"><?php echo count($participants); ?></span>)
+                            </h4>
+                            <button class="btn btn-sm btn-light" data-bs-toggle="modal" data-bs-target="#addParticipantModal">
+                                <i class="bi bi-plus"></i> Add
+                            </button>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div id="participantsList">
+                            <?php if (empty($participants)): ?>
+                                <div class="text-center text-muted py-3" id="noParticipantsMsg">
+                                    <i class="bi bi-person-plus fs-4 d-block mb-2"></i>
+                                    No participants yet. 
+                                    <a href="#" data-bs-toggle="modal" data-bs-target="#addParticipantModal">Add the first one</a>
+                                </div>
+                            <?php else: ?>
+                                <?php foreach ($participants as $participant): ?>
+                                    <div class="participant-item mb-2 p-2 bg-light rounded" data-participant-id="<?php echo $participant['participant_id']; ?>">
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <div>
+                                                <i class="bi bi-person me-1"></i>
+                                                <?php echo htmlspecialchars($participant['name']); ?>
+                                            </div>
+                                            <div class="d-flex align-items-center gap-2">
+                                                <span class="badge bg-success">
+                                                    <?php 
+                                                    $amount = isset($participantAmounts[$participant['participant_id']]) ? 
+                                                        $participantAmounts[$participant['participant_id']]['amount'] : 0;
+                                                    echo formatCurrency($amount); 
+                                                    ?>
+                                                </span>
+                                                <button class="btn btn-sm btn-outline-danger remove-participant" title="Remove <?php echo htmlspecialchars($participant['name']); ?>">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resumen de cantidades -->
+                <div class="card amount-summary-card border-success mb-5">
+                    <div class="card-header bg-success text-white">
+                        <h3 class="mb-0"><i class="bi bi-cash-coin"></i> Amount Due</h3>
+                    </div>
+                    <div class="card-body" id="amountDueContainer">
+                        <?php if (empty($participants)): ?>
+                            <div class="text-center text-muted py-3">
+                                <i class="bi bi-calculator fs-4 d-block mb-2"></i>
+                                Add participants to see how much each person owes
+                            </div>
+                        <?php else: ?>
+                            <?php 
+                            $totalAssigned = array_sum(array_column($participantAmounts, 'amount'));
+                            foreach ($participantAmounts as $participantId => $data): 
+                            ?>
+                                <div class="d-flex justify-content-between align-items-center mb-2 p-2 <?php echo $data['amount'] > 0 ? 'bg-light rounded' : ''; ?>">
+                                    <span>
+                                        <i class="bi bi-person"></i> <?php echo htmlspecialchars($data['name']); ?>
+                                    </span>
+                                    <span class="badge bg-success fs-6"><?php echo formatCurrency($data['amount']); ?></span>
+                                </div>
+                            <?php endforeach; ?>
+                            
+                            <hr>
+                            <div class="d-flex justify-content-between align-items-center p-2 bg-light rounded">
+                                <span class="fw-bold">Total Assigned:</span>
+                                <span class="badge bg-primary fs-5"><?php echo formatCurrency($totalAssigned); ?></span>
+                            </div>
+                            
+                            <?php if ($totalAssigned < $bill['total_amount']): ?>
+                                <div class="alert alert-warning mt-3" role="alert">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                                        <div>
+                                            <strong>Remaining: <?php echo formatCurrency($bill['total_amount'] - $totalAssigned); ?></strong>
+                                            <div class="small">Some items are not assigned yet.</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php else: ?>
+                                <div class="alert alert-success mt-3" role="alert">
+                                    <div class="d-flex align-items-center">
+                                        <i class="bi bi-check-circle-fill me-2"></i>
+                                        <div>All items have been assigned!</div>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Total flotante para móvil -->
+<div class="card floating-total d-lg-none" id="floatingTotal">
+    <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+            <span class="fw-bold">Total Bill:</span>
+            <span class="badge bg-primary"><?php echo formatCurrency($bill['total_amount']); ?></span>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de imagen del recibo -->
+<?php if (!empty($bill['receipt_image'])): ?>
+<div class="modal fade" id="receiptModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Receipt Image</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                     alt="Receipt" 
+                     class="img-fluid">
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<!-- Modal para agregar participante -->
+<div class="modal fade" id="addParticipantModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Participant</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addParticipantForm">
+                    <div class="mb-3">
+                        <label for="participantName" class="form-label">Name</label>
+                        <input type="text" class="form-control" id="participantName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="participantEmail" class="form-label">Email (optional)</label>
+                        <input type="email" class="form-control" id="participantEmail">
+                        <div class="form-text">Email is used for sending payment reminders</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveParticipantBtn">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para asignar item -->
+<div class="modal fade" id="assignItemModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Assign Item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Assign <strong id="assignItemName"></strong> to:</p>
+                
+                <div id="assignParticipantsList">
+                    <?php if (empty($participants)): ?>
+                        <div class="alert alert-info">
+                            No participants added yet. Please add participants first.
+                        </div>
+                    <?php else: ?>
+                        <?php foreach ($participants as $participant): ?>
+                            <div class="form-check">
+                                <input class="form-check-input participant-checkbox" type="checkbox" 
+                                       id="participant<?php echo $participant['participant_id']; ?>" 
+                                       value="<?php echo $participant['participant_id']; ?>">
+                                <label class="form-check-label" for="participant<?php echo $participant['participant_id']; ?>">
+                                    <?php echo htmlspecialchars($participant['name']); ?>
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="saveAssignmentBtn">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const billId = <?php echo $billId; ?>;
+    let currentItemId = null;
+    
+    // Función para hacer peticiones AJAX
+    const makeRequest = async (action, data = {}) => {
+        const formData = new FormData();
+        formData.append('action', action);
+        
+        Object.entries(data).forEach(([key, value]) => {
+            if (Array.isArray(value)) {
+                value.forEach(v => formData.append(`${key}[]`, v));
+            } else {
+                formData.append(key, value);
+            }
+        });
+        
+        try {
+            const response = await fetch(`split_bill.php?id=${billId}`, {
+                method: 'POST',
+                body: formData
+            });
+            return await response.json();
+        } catch (error) {
+            console.error('Request failed:', error);
+            return { success: false, error: error.message };
+        }
+    };
+    
+    // Agregar participante
+    document.getElementById('saveParticipantBtn').addEventListener('click', async function() {
+        const name = document.getElementById('participantName').value.trim();
+        const email = document.getElementById('participantEmail').value.trim();
+        
+        if (!name) {
+            alert('Please enter a name');
+            return;
+        }
+        
+        const data = await makeRequest('add_participant', { name, email });
+        
+        if (data.success) {
+            // Simplemente recargar la página en lugar de actualizar el DOM
+            location.reload();
+        } else {
+            alert('Failed to add participant');
+        }
+    });
+    
+    // Función para agregar participante al DOM
+    const addParticipantToDOM = (participant) => {
+        const noParticipantsMsg = document.getElementById('noParticipantsMsg');
+        if (noParticipantsMsg) {
+            noParticipantsMsg.remove();
+        }
+        
+        const participantsList = document.getElementById('participantsList');
+        const newParticipantItem = document.createElement('div');
+        newParticipantItem.className = 'participant-item mb-2 p-2 bg-light rounded';
+        newParticipantItem.setAttribute('data-participant-id', participant.participant_id);
+        newParticipantItem.innerHTML = `
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <i class="bi bi-person me-1"></i>
+                    ${participant.name}
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success">$0.00</span>
+                    <button class="btn btn-sm btn-outline-danger remove-participant" title="Remove ${participant.name}">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            </div>
+        `;
+        participantsList.appendChild(newParticipantItem);
+        
+        // Agregar al modal de asignación
+        const assignList = document.getElementById('assignParticipantsList');
+        const checkboxDiv = document.createElement('div');
+        checkboxDiv.className = 'form-check';
+        checkboxDiv.innerHTML = `
+            <input class="form-check-input participant-checkbox" type="checkbox" 
+                   id="participant${participant.participant_id}" 
+                   value="${participant.participant_id}">
+            <label class="form-check-label" for="participant${participant.participant_id}">
+                ${participant.name}
+            </label>
+        `;
+        assignList.appendChild(checkboxDiv);
+        
+        updateParticipantCount();
+    };
+    
+    // Remover participante
+    document.getElementById('participantsList').addEventListener('click', async function(e) {
+        if (e.target.closest('.remove-participant')) {
+            const participantChip = e.target.closest('.participant-item');
+            const participantId = participantChip.dataset.participantId;
+            
+            if (confirm('Are you sure you want to remove this participant?')) {
+                const data = await makeRequest('remove_participant', { participant_id: participantId });
+                
+                if (data.success) {
+                    participantChip.remove();
+                    
+                    // Remover del modal de asignación
+                    const checkbox = document.getElementById('participant' + participantId);
+                    if (checkbox) {
+                        checkbox.closest('.form-check').remove();
+                    }
+                    
+                    // Verificar si no quedan participantes
+                    if (!document.querySelectorAll('.participant-item').length) {
+                        document.getElementById('participantsList').innerHTML = `
+                            <div class="no-participants-compact" id="noParticipantsMsg">
+                                <i class="bi bi-person-plus"></i> 
+                                No participants yet. 
+                                <a href="#" data-bs-toggle="modal" data-bs-target="#addParticipantModal">Add the first one</a>
+                            </div>
+                        `;
+                    }
+                    
+                    updateParticipantCount();
+                } else {
+                    alert('Failed to remove participant');
+                }
+            }
+        }
+    });
+    
+    // Actualizar contador de participantes
+    const updateParticipantCount = () => {
+        const count = document.querySelectorAll('.participant-item').length;
+        document.getElementById('participantCount').textContent = count;
+    };
+    
+    // Asignar item
+    document.querySelectorAll('.assign-item').forEach(button => {
+        button.addEventListener('click', function() {
+            currentItemId = this.dataset.itemId;
+            document.getElementById('assignItemName').textContent = this.dataset.itemName;
+            
+            // Limpiar checkboxes
+            document.querySelectorAll('.participant-checkbox').forEach(checkbox => {
+                checkbox.checked = false;
+            });
+        });
+    });
+    
+    // Guardar asignación
+    document.getElementById('saveAssignmentBtn').addEventListener('click', async function() {
+        const checkboxes = document.querySelectorAll('.participant-checkbox:checked');
+        const participantIds = Array.from(checkboxes).map(cb => cb.value);
+        
+        const data = await makeRequest('assign_item', {
+            item_id: currentItemId,
+            participant_ids: participantIds
+        });
+        
+        if (data.success) {
+            updateAssignmentDisplay(currentItemId, checkboxes);
+            bootstrap.Modal.getInstance(document.getElementById('assignItemModal')).hide();
+            
+            // Recargar para actualizar los montos
+            setTimeout(() => location.reload(), 500);
+        } else {
+            alert('Failed to assign item');
+        }
+    });
+    
+    // Actualizar visualización de asignación
+    const updateAssignmentDisplay = (itemId, checkboxes) => {
+        const cell = document.querySelector(`.assigned-to[data-item-id="${itemId}"]`);
+        
+        if (checkboxes.length > 0) {
+            const badges = Array.from(checkboxes).map(cb => {
+                const name = cb.nextElementSibling.textContent.trim();
+                return `<span class="badge bg-info text-dark">${name}</span>`;
+            });
+            cell.innerHTML = badges.join(' ');
+        } else {
+            cell.innerHTML = '<span class="badge bg-light text-muted">Unassigned</span>';
+        }
+    };
+    
+    // Dividir equitativamente
+    document.getElementById('splitEvenlyBtn').addEventListener('click', async function() {
+        const participantCount = document.querySelectorAll('.participant-item').length;
+        
+        if (participantCount === 0) {
+            alert('Please add participants first');
+            return;
+        }
+        
+        if (confirm('This will assign all items equally among all participants. Continue?')) {
+            const data = await makeRequest('split_evenly');
+            
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Failed to split items');
+            }
+        }
+    });
+    
+    // Auto-hide floating total cuando se ve el resumen (móvil)
+    const floatingTotal = document.getElementById('floatingTotal');
+    const summaryCard = document.querySelector('.amount-summary-card');
+    
+    if (floatingTotal && summaryCard) {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                floatingTotal.style.display = entry.isIntersecting ? 'none' : 'block';
+            });
+        }, { threshold: 0.1 });
+        
+        observer.observe(summaryCard);
+    }
+});
+</script>
+
+<?php include 'includes/footer.php'; ?>
