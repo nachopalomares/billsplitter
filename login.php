@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </form>
                     
                     <div class="text-center mt-3">
-                        Don't have an account? <a href="register.php">Register here</a>
+                        Don't have an account? <a href="register.php" class="text-primary text-decoration-underline">Register here</a>
                     </div>
                 </div>
             </div>

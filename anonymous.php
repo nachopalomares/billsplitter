@@ -18,7 +18,7 @@ $_SESSION['anonymous_user'] = true;
         <div class="col-lg-10">
             <div class="text-center mb-5">
                 <h1 class="display-5 fw-bold">Anonymous Bill Splitter</h1>
-                <p class="lead text-muted">Split your bill quickly without creating an account</p>
+                <p class="lead">Split your bill quickly without creating an account</p>
                 <div class="alert alert-info">
                     <i class="bi bi-info-circle me-2"></i>
                     <strong>Note:</strong> Your data won't be saved permanently in anonymous mode.
@@ -91,7 +91,7 @@ $_SESSION['anonymous_user'] = true;
             </div>
 
             <div class="text-center mt-4">
-                <p class="text-muted mb-3">Want to save your splits and access more features?</p>
+                <p class="mb-3">Want to save your splits and access more features?</p>
                 <div class="d-flex justify-content-center gap-2">
                     <a href="register.php" class="btn btn-primary">
                         <i class="bi bi-person-plus me-2"></i>Sign Up Free

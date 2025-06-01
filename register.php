@@ -119,7 +119,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         </form>
                         
                         <div class="text-center mt-3">
-                            Already have an account? <a href="login.php">Login here</a>
+                            Already have an account? <a href="login.php" class="text-primary text-decoration-underline">Login here</a>
                         </div>
                     <?php endif; ?>
                 </div>

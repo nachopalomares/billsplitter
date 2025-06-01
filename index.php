@@ -13,6 +13,9 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
 ?>
 <?php include 'includes/header.php'; ?>
 
+<!-- Incluir CSS específico para la página de inicio -->
+<link rel="stylesheet" href="assets/css/style.css">
+
 <main>
     <!-- Enhanced Hero Section -->
     <section class="hero-section bg-primary py-5">
@@ -20,7 +23,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
             <div class="row align-items-center">
                 <div class="col-md-6 mb-4 mb-md-0">
                     <div class="hero-content">
-                        <h1 class="display-4 fw-bold text-primary mb-3">BillSplitter App</h1>
+                        <h1 class="display-4 fw-bold text-primary mb-3 text-muted">BillSplitter App</h1>
                         <p class="lead text-muted mb-4">
                             Split your bills with friends easily! No more calculator math or awkward conversations about who owes what.
                         </p>
@@ -46,17 +49,17 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
                         <!-- Updated action buttons with your preferred style -->
                         <div class="hero-actions mt-4">
                             <?php if ($isLoggedIn): ?>
-                                <a href="dashboard.php" class="btn btn-primary btn-lg me-3">
+                                <a href="dashboard.php" class="btn btn-primary btn-lg">
                                     <i class="bi bi-speedometer2 me-2"></i> My Dashboard
                                 </a>
                                 <a href="upload_receipt.php" class="btn btn-outline-light btn-lg">
                                     <i class="bi bi-upload me-2"></i> Upload Receipt
                                 </a>
                             <?php else: ?>
-                                <a href="register.php" class="btn btn-primary btn-lg me-3">
+                                <a href="register.php" class="btn btn-primary btn-lg">
                                     <i class="bi bi-person-plus me-2"></i> Get Started Free
                                 </a>
-                                <a href="#how-it-works" class="btn btn-outline-light btn-lg me-3">
+                                <a href="#how-it-works" class="btn btn-outline-light btn-lg">
                                     <i class="bi bi-play-circle me-2"></i> See How It Works
                                 </a>
                                 <a href="anonymous.php" class="btn btn-outline-secondary btn-lg">
@@ -136,7 +139,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
     <section class="how-it-works py-5 bg-light" id="how-it-works">
         <div class="container">
             <div class="text-center mb-5">
-                <h2 class="display-5 fw-bold">How It Works</h2>
+                <h2 class="display-5 fw-bold text-muted">How It Works</h2>
                 <p class="lead text-muted">Three simple steps to split any bill</p>
             </div>
             
@@ -195,45 +198,6 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
         </div>
     </section>
 
-    <!-- Features section -->
-    <section class="features py-5">
-        <div class="container">
-            <div class="text-center mb-5">
-                <h2 class="display-5 fw-bold">Why Choose BillSplitter?</h2>
-            </div>
-            
-            <div class="row g-4">
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-item text-center">
-                        <i class="bi bi-lightning-charge text-primary fs-1 mb-3"></i>
-                        <h5>Lightning Fast</h5>
-                        <p class="text-muted small">Split bills in seconds, not minutes</p>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-item text-center">
-                        <i class="bi bi-phone text-success fs-1 mb-3"></i>
-                        <h5>Mobile Friendly</h5>
-                        <p class="text-muted small">Works perfectly on any device</p>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-item text-center">
-                        <i class="bi bi-shield-check text-info fs-1 mb-3"></i>
-                        <h5>Secure & Private</h5>
-                        <p class="text-muted small">Your data is safe and encrypted</p>
-                    </div>
-                </div>
-                <div class="col-md-6 col-lg-3">
-                    <div class="feature-item text-center">
-                        <i class="bi bi-gift text-warning fs-1 mb-3"></i>
-                        <h5>Free Forever</h5>
-                        <p class="text-muted small">No hidden fees or subscriptions</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
 
     <!-- Enhanced CTA section -->
     <section class="cta-section bg-primary text-white py-5">
@@ -244,13 +208,16 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
                     <p class="lead mb-4">Join over <?= number_format($stats['users']) ?> users who have split <?= number_format($stats['bills']) ?> bills successfully!</p>
                     
                     <?php if (!$isLoggedIn): ?>
-                        <div class="d-flex flex-wrap justify-content-center gap-3">
+                        <div class="d-flex flex-wrap justify-content-center" style="gap: 1rem;">
                             <a href="login.php" class="btn btn-outline-light btn-lg">
                                 <i class="bi bi-box-arrow-in-right me-2"></i>Log In
                             </a>
+                            <a href="anonymous.php" class="btn btn-light btn-lg">
+                                <i class="bi bi-lightning me-2"></i>Try without Account
+                            </a>
                         </div>
                     <?php else: ?>
-                        <div class="d-flex flex-wrap justify-content-center gap-3">
+                        <div class="d-flex flex-wrap justify-content-center" style="gap: 1rem;">
                             <a href="upload_receipt.php" class="btn btn-light btn-lg">
                                 <i class="bi bi-upload me-2"></i>Upload Your First Receipt
                             </a>
@@ -265,66 +232,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
     </section>
 </main>
 
-<!-- Add custom CSS for better styling -->
-<style>
-.bg-gradient-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
 
-.receipt-mockup {
-    background: #fff;
-    border-radius: 15px;
-    overflow: hidden;
-    border: 1px solid #e9ecef;
-}
-
-.stat-card {
-    transition: transform 0.2s ease-in-out;
-}
-
-.stat-card:hover {
-    transform: translateY(-2px);
-}
-
-.smooth-scroll {
-    transition: all 0.3s ease;
-}
-
-.hero-actions .btn {
-    transition: all 0.2s ease-in-out;
-}
-
-.hero-actions .btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
-
-.feature-item i {
-    transition: transform 0.3s ease;
-}
-
-.feature-item:hover i {
-    transform: scale(1.1);
-}
-
-@media (max-width: 768px) {
-    .display-4 {
-        font-size: 2rem;
-    }
-    
-    .hero-actions .btn {
-        margin-bottom: 0.5rem;
-        margin-right: 0 !important;
-    }
-    
-    .hero-actions {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 0.5rem;
-    }
-}
-</style>
 
 <!-- Add smooth scrolling JavaScript -->
 <script>

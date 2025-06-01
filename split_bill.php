@@ -378,11 +378,11 @@ closeDbConnection($conn);
     
 </style>
 
-<div class="container mt-4">
+<div class="container mt-5">
     <nav aria-label="breadcrumb">
         <ol class="breadcrumb">
             <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
-            <li class="breadcrumb-item active text-muted">Bill Details</li>
+            <li class="breadcrumb-item active text-primary">Bill Details</li>
         </ol>
     </nav>
 
@@ -457,7 +457,7 @@ closeDbConnection($conn);
             <!-- Items de la factura -->
             <div class="card mb-4">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                    <h3 class="mb-0 text-info"><i class="bi bi-list-check"></i> Bill Items</h3>
+                    <h3 class="mb-0 text-primary"><i class="bi bi-list-check"></i> Bill Items</h3>
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">

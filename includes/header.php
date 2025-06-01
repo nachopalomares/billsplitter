@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     
     <!-- Custom CSS -->
-    <link rel="stylesheet" href="./assets/css/style.css">
+    <link rel="stylesheet" href="assets/css/style.css">
     
     <!-- Favicon -->
     <link rel="icon" type="image/x-icon" href="<?php echo BASE_URL; ?>/assets/favicon.ico">
@@ -119,8 +119,6 @@
         </nav>
     </header>
 
-    <!-- Add padding for fixed navbar -->
-    <div style="padding-top: 76px;"></div>
 
     <!-- Additional CSS for avatar and enhanced elements -->
     <style>

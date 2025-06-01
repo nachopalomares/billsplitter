@@ -143,7 +143,7 @@ closeDbConnection($conn);
     }
 </style>
 
-<div class="container mt-4">
+<div class="container mt-5">
     <!-- Botones de acción superiores -->
     <div class="row mb-4 no-print">
         <div class="col-12">
@@ -151,7 +151,7 @@ closeDbConnection($conn);
                 <nav aria-label="breadcrumb">
                     <ol class="breadcrumb mb-0">
                         <li class="breadcrumb-item"><a href="dashboard.php">Dashboard</a></li>
-                        <li class="breadcrumb-item active text-muted">Bill Summary</li>
+                        <li class="breadcrumb-item text-primary text-decoration-underline">Bill Summary</li>
                     </ol>
                 </nav>
                 
