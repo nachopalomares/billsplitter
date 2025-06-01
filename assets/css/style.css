@@ -12,6 +12,7 @@ body {
     background-color: #14182b;
     color: #ffffff;
     line-height: 1.6;
+    /* Remove fixed padding-top since JS will handle it dynamically */
 }
 
 .container {
@@ -38,6 +39,153 @@ ul {
     list-style: none;
 }
 
+/* Ensure navbar stays on top and smooth transitions */
+.navbar.fixed-top {
+    z-index: 1030;
+    transition: all 0.3s ease;
+}
+
+/* Header */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.logo a {
+    font-size: 24px;
+    font-weight: bold;
+}
+
+nav ul {
+    display: flex;
+}
+
+nav ul li {
+    margin-left: 20px;
+}
+
+nav ul li a:hover {
+    text-decoration: underline;
+}
+
+.auth-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.login-btn {
+    padding: 8px 16px;
+    background: transparent;
+    border: 1px solid #ffffff;
+    border-radius: 4px;
+}
+
+.signup-btn {
+    padding: 8px 16px;
+    background: #2760ff;
+    color: white;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+/* Buttons */
+.btn {
+    display: inline-block;
+    padding: 12px 20px;
+    border-radius: 4px;
+    font-weight: bold;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.btn-primary {
+    background-color: #2760ff;
+    color: white;
+}
+
+.btn-secondary {
+    background-color: white;
+    color: #14182b;
+}
+
+.cta-buttons {
+    margin: 20px 0 30px 0;
+}
+
+/* Hero Section */
+.hero {
+    padding: 60px 0;
+    text-align: left;
+}
+
+.hero h2 {
+    font-size: 36px;
+}
+
+.hero p {
+    font-size: 18px;
+    max-width: 600px;
+}
+
+.hero-image {
+    max-width: 100%;
+    margin-top: 30px;
+    border-radius: 8px;
+    display: none; /* Hide in mobile view */
+}
+
+/* Features Section */
+.features {
+    padding: 40px 0;
+}
+
+.features h2 {
+    margin-bottom: 30px;
+}
+
+.feature {
+    margin-bottom: 40px;
+}
+
+.feature-icon {
+    font-size: 24px;
+    margin-bottom: 15px;
+}
+
+/* How It Works Section */
+.how-it-works {
+    padding: 40px 0;
+}
+
+.steps {
+    margin-top: 30px;
+}
+
+.step {
+    margin-bottom: 30px;
+    position: relative;
+}
+
+.step-number {
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    background-color: #2760ff;
+    color: white;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 30px;
+    margin-bottom: 15px;
+}
+
+/* Main content area - ensure minimum height */
+main {
+    min-height: calc(100vh - 160px);
+}
+
 /* Footer */
 footer {
     margin-top: 60px;
@@ -60,6 +208,21 @@ footer {
     margin-bottom: 10px;
 }
 
+.social-links {
+    display: flex;
+    gap: 15px;
+}
+
+.social-icon {
+    font-size: 20px;
+    opacity: 0.8;
+    transition: opacity 0.3s;
+}
+
+.social-icon:hover {
+    opacity: 1;
+}
+
 .footer-bottom {
     margin-top: 40px;
     text-align: center;
@@ -73,13 +236,128 @@ footer {
     color: #2760ff;
 }
 
+/* Smooth scrolling for anchor links */
+html {
+    scroll-behavior: smooth;
+}
+
+/* Additional utility classes for fixed navbar compatibility */
+.content-wrapper {
+    transition: padding-top 0.3s ease;
+}
+
+/* Ensure dropdowns and modals stay above content */
+.dropdown-menu {
+    z-index: 1040;
+}
+
+.modal {
+    z-index: 1050;
+}
+
 /* Responsive Styles */
 @media (min-width: 768px) {
+    .hero {
+        padding: 100px 0;
+    }
+
+    .hero h2 {
+        font-size: 48px;
+    }
+
+    .hero-image {
+        display: block;
+    }
+
+    .features {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 30px;
+    }
+
+    .features h2 {
+        grid-column: 1 / -1;
+    }
+
+    .steps {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 30px;
+    }
+
+    .how-it-works h2 {
+        text-align: center;
+    }
+
     .footer-top {
         grid-template-columns: 2fr 1fr 1fr;
     }
 }
 
 @media (max-width: 768px) {
-    /* No mobile-specific styles needed after cleanup */
+    header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    nav ul {
+        margin: 15px 0;
+    }
+    
+    nav ul li:first-child {
+        margin-left: 0;
+    }
+    
+    .auth-buttons {
+        width: 100%;
+        justify-content: space-between;
+        margin-top: 15px;
+    }
+    
+    .login-btn, .signup-btn {
+        width: 48%;
+        text-align: center;
+    }
+}
+
+/* Additional responsive adjustments for different screen sizes */
+@media (max-width: 991.98px) {
+    /* Styles for tablets and smaller */
+    .hero h2 {
+        font-size: 32px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    /* Styles for mobile phones */
+    .hero h2 {
+        font-size: 28px;
+    }
+    
+    .container {
+        padding: 0 15px;
+    }
+}
+
+/* Loading state - optional enhancement */
+body.loading {
+    overflow: hidden;
+}
+
+/* Accessibility improvements */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* Focus styles for better accessibility */
+.btn:focus,
+button:focus,
+a:focus {
+    outline: 2px solid #60a5fa;
+    outline-offset: 2px;
 }

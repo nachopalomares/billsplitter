@@ -279,5 +279,6 @@
             }
         });
     </script>
+    <script src="<?php echo BASE_URL; ?>/assets/js/fix-header.js"></script>
 </body>
 </html>
