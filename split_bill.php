@@ -42,6 +42,12 @@ $result = $stmt->get_result();
 $items = $result->fetch_all(MYSQLI_ASSOC);
 $stmt->close();
 
+// Create an item lookup map for efficient access
+$itemsMap = [];
+foreach ($items as $item) {
+    $itemsMap[$item['item_id']] = $item;
+}
+
 // Get participants
 $stmt = $conn->prepare("SELECT * FROM participants WHERE bill_id = ? ORDER BY participant_id");
 $stmt->bind_param("i", $billId);
@@ -76,8 +82,8 @@ foreach ($assignments as $assignment) {
     ];
 }
 
-// Calculate amount due for each participant
-function calculateParticipantAmounts($items, $participants, $assignments) {
+// Calculate amount due for each participant - optimized version
+function calculateParticipantAmounts($itemsMap, $participants, $assignments) {
     $participantAmounts = [];
     
     // Initialize amounts to 0 for all participants
@@ -88,17 +94,9 @@ function calculateParticipantAmounts($items, $participants, $assignments) {
         ];
     }
     
-    // Calculate amounts based on assignments
+    // Calculate amounts based on assignments (more efficient with item map)
     foreach ($assignments as $assignment) {
-        // Find the item
-        $item = null;
-        foreach ($items as $i) {
-            if ($i['item_id'] == $assignment['item_id']) {
-                $item = $i;
-                break;
-            }
-        }
-        
+        $item = $itemsMap[$assignment['item_id']] ?? null;
         if ($item && isset($participantAmounts[$assignment['participant_id']])) {
             $shareAmount = ($item['price'] * $assignment['share_percentage']) / 100;
             $participantAmounts[$assignment['participant_id']]['amount'] += $shareAmount;
@@ -108,7 +106,7 @@ function calculateParticipantAmounts($items, $participants, $assignments) {
     return $participantAmounts;
 }
 
-$participantAmounts = calculateParticipantAmounts($items, $participants, $assignments);
+$participantAmounts = calculateParticipantAmounts($itemsMap, $participants, $assignments);
 
 // Handle AJAX requests
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
@@ -241,21 +239,8 @@ closeDbConnection($conn);
 
 <?php include 'includes/header.php'; ?>
 
-<!-- Optimized styles -->
+<!-- Optimized styles - removed unused classes -->
 <style>
-    .sticky-summary {
-        position: sticky;
-        top: 20px;
-        z-index: 1020;
-    }
-    
-    @media (max-width: 991.98px) {
-        .sticky-summary {
-            position: relative;
-            top: auto;
-        }
-    }
-    
     .amount-summary-card {
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         border: 2px solid #28a745;
@@ -274,81 +259,6 @@ closeDbConnection($conn);
         .floating-total {
             display: none;
         }
-    }
-    
-    /* Compact participants */
-    .participants-compact {
-        background: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 8px;
-        padding: 15px;
-    }
-    
-    .participant-chip {
-        display: inline-flex;
-        align-items: center;
-        background: white;
-        border: 1px solid #dee2e6;
-        border-radius: 20px;
-        padding: 6px 12px;
-        margin: 3px;
-        font-size: 0.9rem;
-        transition: all 0.2s ease;
-        position: relative;
-    }
-    
-    .participant-chip:hover {
-        background: #f8f9fa;
-        border-color: #adb5bd;
-    }
-    
-    .participant-chip:hover .remove-btn {
-        opacity: 1;
-    }
-    
-    /* Discreet delete button */
-    .remove-btn {
-        background: none;
-        border: none;
-        color: #dc3545;
-        font-size: 12px;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        margin-left: 6px;
-        opacity: 0;
-        transition: all 0.2s ease;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        line-height: 1;
-    }
-    
-    .remove-btn:hover {
-        background: #dc3545;
-        color: white;
-        opacity: 1 !important;
-    }
-    
-    .participant-amount {
-        font-weight: 600;
-        color: #28a745;
-        margin-left: 6px;
-    }
-    
-    .participants-header-compact {
-        display: flex;
-        justify-content: between;
-        align-items: center;
-        margin-bottom: 10px;
-    }
-    
-    .no-participants-compact {
-        text-align: center;
-        color: #6c757d;
-        font-style: italic;
-        padding: 20px 0;
     }
     
     .sticky-sidebar {
@@ -736,58 +646,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const data = await makeRequest('add_participant', { name, email });
         
         if (data.success) {
-            // Simply reload the page instead of updating the DOM
+            // Reload the page to refresh data
             location.reload();
         } else {
             alert('Failed to add participant');
         }
     });
     
-    // Function to add participant to DOM
-    const addParticipantToDOM = (participant) => {
-        const noParticipantsMsg = document.getElementById('noParticipantsMsg');
-        if (noParticipantsMsg) {
-            noParticipantsMsg.remove();
-        }
-        
-        const participantsList = document.getElementById('participantsList');
-        const newParticipantItem = document.createElement('div');
-        newParticipantItem.className = 'participant-item mb-2 p-2 bg-light rounded';
-        newParticipantItem.setAttribute('data-participant-id', participant.participant_id);
-        newParticipantItem.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <i class="bi bi-person me-1"></i>
-                    ${participant.name}
-                </div>
-                <div class="d-flex align-items-center gap-2">
-                    <span class="badge bg-success">$0.00</span>
-                    <button class="btn btn-sm btn-outline-danger remove-participant" title="Remove ${participant.name}">
-                        <i class="bi bi-x"></i>
-                    </button>
-                </div>
-            </div>
-        `;
-        participantsList.appendChild(newParticipantItem);
-        
-        // Add to assignment modal
-        const assignList = document.getElementById('assignParticipantsList');
-        const checkboxDiv = document.createElement('div');
-        checkboxDiv.className = 'form-check';
-        checkboxDiv.innerHTML = `
-            <input class="form-check-input participant-checkbox" type="checkbox" 
-                   id="participant${participant.participant_id}" 
-                   value="${participant.participant_id}">
-            <label class="form-check-label" for="participant${participant.participant_id}">
-                ${participant.name}
-            </label>
-        `;
-        assignList.appendChild(checkboxDiv);
-        
-        updateParticipantCount();
-    };
-    
-    // Remover participante
+    // Remove participant
     document.getElementById('participantsList').addEventListener('click', async function(e) {
         if (e.target.closest('.remove-participant')) {
             const participantChip = e.target.closest('.participant-item');
@@ -797,26 +663,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await makeRequest('remove_participant', { participant_id: participantId });
                 
                 if (data.success) {
-                    participantChip.remove();
-                    
-                    // Remover del modal de asignación
-                    const checkbox = document.getElementById('participant' + participantId);
-                    if (checkbox) {
-                        checkbox.closest('.form-check').remove();
-                    }
-                    
-                    // Verificar si no quedan participantes
-                    if (!document.querySelectorAll('.participant-item').length) {
-                        document.getElementById('participantsList').innerHTML = `
-                            <div class="no-participants-compact" id="noParticipantsMsg">
-                                <i class="bi bi-person-plus"></i> 
-                                No participants yet. 
-                                <a href="#" data-bs-toggle="modal" data-bs-target="#addParticipantModal">Add the first one</a>
-                            </div>
-                        `;
-                    }
-                    
-                    updateParticipantCount();
+                    // Reload the page to refresh data
+                    location.reload();
                 } else {
                     alert('Failed to remove participant');
                 }
@@ -824,26 +672,26 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Actualizar contador de participantes
+    // Update participant count
     const updateParticipantCount = () => {
         const count = document.querySelectorAll('.participant-item').length;
         document.getElementById('participantCount').textContent = count;
     };
     
-    // Asignar item
+    // Assign item
     document.querySelectorAll('.assign-item').forEach(button => {
         button.addEventListener('click', function() {
             currentItemId = this.dataset.itemId;
             document.getElementById('assignItemName').textContent = this.dataset.itemName;
             
-            // Limpiar checkboxes
+            // Clear checkboxes
             document.querySelectorAll('.participant-checkbox').forEach(checkbox => {
                 checkbox.checked = false;
             });
         });
     });
     
-    // Guardar asignación
+    // Save assignment
     document.getElementById('saveAssignmentBtn').addEventListener('click', async function() {
         const checkboxes = document.querySelectorAll('.participant-checkbox:checked');
         const participantIds = Array.from(checkboxes).map(cb => cb.value);
@@ -854,32 +702,15 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         
         if (data.success) {
-            updateAssignmentDisplay(currentItemId, checkboxes);
             bootstrap.Modal.getInstance(document.getElementById('assignItemModal')).hide();
-            
-            // Recargar para actualizar los montos
-            setTimeout(() => location.reload(), 500);
+            // Reload to update amounts
+            location.reload();
         } else {
             alert('Failed to assign item');
         }
     });
     
-    // Actualizar visualización de asignación
-    const updateAssignmentDisplay = (itemId, checkboxes) => {
-        const cell = document.querySelector(`.assigned-to[data-item-id="${itemId}"]`);
-        
-        if (checkboxes.length > 0) {
-            const badges = Array.from(checkboxes).map(cb => {
-                const name = cb.nextElementSibling.textContent.trim();
-                return `<span class="badge bg-info text-dark">${name}</span>`;
-            });
-            cell.innerHTML = badges.join(' ');
-        } else {
-            cell.innerHTML = '<span class="badge bg-light text-muted">Unassigned</span>';
-        }
-    };
-    
-    // Dividir equitativamente
+    // Split evenly
     document.getElementById('splitEvenlyBtn').addEventListener('click', async function() {
         const participantCount = document.querySelectorAll('.participant-item').length;
         
@@ -899,7 +730,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
     
-    // Auto-hide floating total cuando se ve el resumen (móvil)
+    // Auto-hide floating total when summary is visible (mobile)
     const floatingTotal = document.getElementById('floatingTotal');
     const summaryCard = document.querySelector('.amount-summary-card');
     
