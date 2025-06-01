@@ -138,7 +138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
             <?php if (!$uploadSuccess): ?>
             <!-- Step 1: Upload Image -->
             <div class="card">
-                <div class="card-header">
+                <div class="card-header bg-primary text-white">
                     <h2><i class="bi bi-cloud-upload"></i> Upload Receipt</h2>
                 </div>
                 <div class="card-body">
@@ -175,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                 <div class="col-md-6">
                     <!-- Display uploaded image with sticky behavior -->
                     <div class="card mb-4 receipt-image-container" id="receipt-image-card">
-                        <div class="card-header">
+                        <div class="card-header bg-primary text-white">
                             <h3><i class="bi bi-image"></i> Receipt Image</h3>
                         </div>
                         <div class="card-body text-center">
@@ -218,7 +218,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                 <div class="col-md-6">
                     <!-- Manual item entry form -->
                     <div class="card">
-                        <div class="card-header">
+                        <div class="card-header bg-primary text-white">
                             <h3><i class="bi bi-pencil-square"></i> Enter Items Manually</h3>
                         </div>
                         <div class="card-body">
@@ -415,6 +415,29 @@ document.addEventListener('DOMContentLoaded', function() {
 
 .item-row .btn {
     height: 38px; /* Mismo altura que los inputs */
+}
+
+/* Mejorar contraste de texto */
+.card-header {
+    border-bottom: 1px solid rgba(0,0,0,0.125);
+}
+
+.card-header h2, 
+.card-header h3 {
+    margin-bottom: 0;
+}
+
+.bg-primary {
+    background-color: #0d6efd !important;
+}
+
+.text-white {
+    color: #fff !important;
+}
+
+.form-label {
+    font-weight: 500;
+    color: #212529;
 }
 </style>
 

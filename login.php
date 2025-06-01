@@ -65,7 +65,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="col-md-6">
             <div class="card">
                 <div class="card-header">
-                    <h3 class="text-center">Login</h3>
+                    <h3 class="text-center" style="color: #212529; font-weight: 600;">Login</h3>
                 </div>
                 <div class="card-body">
                     <?php if (!empty($errors)): ?>

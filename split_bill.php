@@ -420,7 +420,7 @@ closeDbConnection($conn);
         </div>
 
         <div class="col-lg-4">
-            <div class="card bg-dark">
+            <div class="card bg-light">
                 <div class="card-body">
                     <h4 class="card-title"><i class="bi bi-scissors"></i> Bill Splitting</h4>
                     <p class="card-text">Assign items to participants to calculate how much each person owes.</p>
@@ -649,20 +649,20 @@ closeDbConnection($conn);
 <div class="modal fade" id="addParticipantModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
+            <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">Add Participant</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="addParticipantForm">
                     <div class="mb-3">
-                        <label for="participantName" class="form-label">Name</label>
+                        <label for="participantName" class="form-label fw-bold text-dark">Name</label>
                         <input type="text" class="form-control" id="participantName" required>
                     </div>
                     <div class="mb-3">
-                        <label for="participantEmail" class="form-label">Email (optional)</label>
+                        <label for="participantEmail" class="form-label fw-bold text-dark">Email (optional)</label>
                         <input type="email" class="form-control" id="participantEmail">
-                        <div class="form-text">Email is used for sending payment reminders</div>
+                        <div class="form-text text-dark">Email is used for sending payment reminders</div>
                     </div>
                 </form>
             </div>
@@ -678,12 +678,12 @@ closeDbConnection($conn);
 <div class="modal fade" id="assignItemModal" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <div class="modal-header">
+            <div class="modal-header bg-primary text-white">
                 <h5 class="modal-title">Assign Item</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
-                <p>Assign <strong id="assignItemName"></strong> to:</p>
+                <p class="fw-bold text-dark">Assign <strong id="assignItemName"></strong> to:</p>
                 
                 <div id="assignParticipantsList">
                     <?php if (empty($participants)): ?>
@@ -696,7 +696,7 @@ closeDbConnection($conn);
                                 <input class="form-check-input participant-checkbox" type="checkbox" 
                                        id="participant<?php echo $participant['participant_id']; ?>" 
                                        value="<?php echo $participant['participant_id']; ?>">
-                                <label class="form-check-label" for="participant<?php echo $participant['participant_id']; ?>">
+                                <label class="form-check-label fw-medium text-dark" for="participant<?php echo $participant['participant_id']; ?>">
                                     <?php echo htmlspecialchars($participant['name']); ?>
                                 </label>
                             </div>

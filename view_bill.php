@@ -266,7 +266,7 @@ closeDbConnection($conn);
                     <button class="btn btn-link text-decoration-none p-0 w-100 text-start" 
                             type="button" data-bs-toggle="collapse" data-bs-target="#itemsDetail">
                         <div class="d-flex justify-content-between align-items-center">
-                            <h4 class="mb-0">
+                            <h4 class="mb-0 text-dark">
                                 <i class="bi bi-list-check"></i> Bill Items Detail
                             </h4>
                             <i class="bi bi-chevron-down"></i>
