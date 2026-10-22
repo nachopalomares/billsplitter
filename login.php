@@ -7,8 +7,8 @@ $errors = [];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Get form data
-    $username = trim($_POST['username']);
-    $password = $_POST['password'];
+    $username = trim(postString('username'));
+    $password = postString('password');
     
     // Validate input
     if (empty($username)) {
@@ -32,6 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $user = $result->fetch_assoc();
             
             if (password_verify($password, $user['password_hash'])) {
+                session_regenerate_id(true);
+                $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
                 // Login successful
                 $_SESSION['user_id'] = $user['user_id'];
                 $_SESSION['username'] = $user['username'];
@@ -79,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <?php endif; ?>
                     
                     <form method="POST" action="login.php">
+                        <?= csrfField() ?>
                         <div class="form-group mb-3">
                             <label for="username">Username</label>
                             <input type="text" class="form-control" id="username" name="username" value="<?php echo isset($username) ? htmlspecialchars($username) : ''; ?>">

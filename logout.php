@@ -1,6 +1,12 @@
 <?php
 require_once 'config/config.php';
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Allow: POST');
+    http_response_code(405);
+    exit('Use the logout button to end your session.');
+}
+
 // Start session if not already started
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

@@ -9,92 +9,43 @@ require_once 'includes/functions.php';
 // Require login
 requireLogin();
 
-// Handle bill deletion via AJAX
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'delete_bill') {
-    // Clear the buffer for clean JSON response
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete_bill') {
     ob_end_clean();
-    
     header('Content-Type: application/json');
-    
-    $billId = intval($_POST['bill_id']);
-    $userId = $_SESSION['user_id'];
-    
-    $conn = getDbConnection();
-    
-    // Verify that the bill belongs to the user
-    $stmt = $conn->prepare("SELECT bill_id FROM bills WHERE bill_id = ? AND user_id = ?");
-    $stmt->bind_param("ii", $billId, $userId);
-    $stmt->execute();
-    $result = $stmt->get_result();
-    
-    if ($result->num_rows === 1) {
-        // Begin transaction
-        $conn->begin_transaction();
-        
-        try {
-            // Delete in correct order to handle foreign key constraints
-            
-            // First, get all item IDs for this bill
-            $stmt = $conn->prepare("SELECT item_id FROM bill_items WHERE bill_id = ?");
-            $stmt->bind_param("i", $billId);
-            $stmt->execute();
-            $itemResult = $stmt->get_result();
-            $itemIds = [];
-            while ($row = $itemResult->fetch_assoc()) {
-                $itemIds[] = $row['item_id'];
-            }
-            
-            // Delete item assignments if there are items
-            if (!empty($itemIds)) {
-                $placeholders = str_repeat('?,', count($itemIds) - 1) . '?';
-                $stmt = $conn->prepare("DELETE FROM item_assignments WHERE item_id IN ($placeholders)");
-                $stmt->bind_param(str_repeat('i', count($itemIds)), ...$itemIds);
-                $stmt->execute();
-            }
-            
-            // Delete participants
-            $stmt = $conn->prepare("DELETE FROM participants WHERE bill_id = ?");
-            $stmt->bind_param("i", $billId);
-            $stmt->execute();
-            
-            // Delete bill items
-            $stmt = $conn->prepare("DELETE FROM bill_items WHERE bill_id = ?");
-            $stmt->bind_param("i", $billId);
-            $stmt->execute();
-            
-            // Delete the bill
-            $stmt = $conn->prepare("DELETE FROM bills WHERE bill_id = ? AND user_id = ?");
-            $stmt->bind_param("ii", $billId, $userId);
-            $stmt->execute();
-            
-            // Commit transaction
-            $conn->commit();
-            
-            // Close connection
-            $stmt->close();
-            closeDbConnection($conn);
-            
-            echo json_encode(['success' => true]);
-            exit;
-            
-        } catch (Exception $e) {
-            // Rollback transaction
-            $conn->rollback();
-            
-            error_log("Delete bill error: " . $e->getMessage());
-            echo json_encode(['success' => false, 'error' => 'Failed to delete bill: ' . $e->getMessage()]);
-            
-            $stmt->close();
-            closeDbConnection($conn);
-            exit;
-        }
-    } else {
-        echo json_encode(['success' => false, 'error' => 'Bill not found or access denied']);
-        
-        $stmt->close();
-        closeDbConnection($conn);
+    $billId = filter_var($_POST['bill_id'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+    if ($billId === false) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'error' => 'Invalid bill.']);
         exit;
     }
+    $conn = getDbConnection();
+    $conn->begin_transaction();
+    try {
+        $stmt = $conn->prepare('SELECT image_path FROM bills WHERE bill_id = ? AND user_id = ? FOR UPDATE');
+        $stmt->bind_param('ii', $billId, $_SESSION['user_id']);
+        $stmt->execute();
+        $bill = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$bill) {
+            throw new InvalidArgumentException('Bill not found or access denied.');
+        }
+        $stmt = $conn->prepare('DELETE FROM bills WHERE bill_id = ? AND user_id = ?');
+        $stmt->bind_param('ii', $billId, $_SESSION['user_id']);
+        $stmt->execute();
+        $stmt->close();
+        $conn->commit();
+        $image = basename($bill['image_path'] ?? '');
+        if ($image !== '' && is_file(UPLOAD_DIR . $image) && !unlink(UPLOAD_DIR . $image)) {
+            error_log('Could not remove the deleted bill receipt.');
+        }
+        echo json_encode(['success' => true]);
+    } catch (Throwable $error) {
+        $conn->rollback();
+        error_log('Bill deletion failed: ' . $error->getMessage());
+        echo json_encode(['success' => false, 'error' => 'Could not delete this bill.']);
+    }
+    closeDbConnection($conn);
+    exit;
 }
 
 // For normal page view, we need to discard any output buffering
@@ -109,7 +60,7 @@ $conn = getDbConnection();
 $userId = $_SESSION['user_id'];
 
 $stmt = $conn->prepare("
-    SELECT b.*, COUNT(bi.item_id) as item_count, COUNT(DISTINCT p.participant_id) as participant_count
+    SELECT b.*, COUNT(DISTINCT bi.item_id) as item_count, COUNT(DISTINCT p.participant_id) as participant_count
     FROM bills b
     LEFT JOIN bill_items bi ON b.bill_id = bi.bill_id
     LEFT JOIN participants p ON b.bill_id = p.bill_id
@@ -145,9 +96,9 @@ closeDbConnection($conn);
             <?php foreach ($bills as $bill): ?>
                 <div class="col-md-6 col-lg-4 mb-4">
                     <div class="card h-100">
-                        <?php if (!empty($bill['receipt_image'])): ?>
+                        <?php if (!empty($bill['image_path'])): ?>
                         <div class="card-img-top-container" style="height: 200px; overflow: hidden;">
-                            <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                            <img src="<?php echo htmlspecialchars(receiptUrl($bill)); ?>"
                                  alt="Receipt" 
                                  class="card-img-top" 
                                  style="width: 100%; height: 100%; object-fit: cover;">
@@ -243,9 +194,11 @@ document.addEventListener('DOMContentLoaded', function() {
         const formData = new FormData();
         formData.append('action', 'delete_bill');
         formData.append('bill_id', billIdToDelete);
+        formData.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
         
         fetch('dashboard.php', {
             method: 'POST',
+            headers: { 'Accept': 'application/json' },
             body: formData
         })
         .then(response => {

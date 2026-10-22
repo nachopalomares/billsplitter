@@ -61,6 +61,7 @@ $stmt = $conn->prepare("
     SELECT ia.*, p.name as participant_name, p.participant_id
     FROM item_assignments ia 
     JOIN participants p ON ia.participant_id = p.participant_id
+    JOIN bill_items bi ON ia.item_id = bi.item_id AND bi.bill_id = p.bill_id
     WHERE p.bill_id = ?
 ");
 $stmt->bind_param("i", $billId);
@@ -82,29 +83,6 @@ foreach ($assignments as $assignment) {
     ];
 }
 
-// Calculate amount due for each participant - optimized version
-function calculateParticipantAmounts($itemsMap, $participants, $assignments) {
-    $participantAmounts = [];
-    
-    // Initialize amounts to 0 for all participants
-    foreach ($participants as $participant) {
-        $participantAmounts[$participant['participant_id']] = [
-            'name' => $participant['name'],
-            'amount' => 0
-        ];
-    }
-    
-    // Calculate amounts based on assignments (more efficient with item map)
-    foreach ($assignments as $assignment) {
-        $item = $itemsMap[$assignment['item_id']] ?? null;
-        if ($item && isset($participantAmounts[$assignment['participant_id']])) {
-            $shareAmount = ($item['price'] * $assignment['share_percentage']) / 100;
-            $participantAmounts[$assignment['participant_id']]['amount'] += $shareAmount;
-        }
-    }
-    
-    return $participantAmounts;
-}
 
 $participantAmounts = calculateParticipantAmounts($itemsMap, $participants, $assignments);
 
@@ -114,9 +92,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     
     switch ($_POST['action']) {
         case 'add_participant':
-            if (isset($_POST['name']) && !empty(trim($_POST['name']))) {
-                $name = trim($_POST['name']);
-                $email = isset($_POST['email']) ? trim($_POST['email']) : null;
+            $name = trim(postString('name'));
+            $email = trim(postString('email'));
+            if ($name !== '' && strlen($name) <= 50 && strlen($email) <= 100
+                && ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL))) {
                 
                 $stmt = $conn->prepare("INSERT INTO participants (bill_id, name, email) VALUES (?, ?, ?)");
                 $stmt->bind_param("iss", $billId, $name, $email);
@@ -151,10 +130,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             
         case 'assign_item':
             if (isset($_POST['item_id']) && is_numeric($_POST['item_id']) && 
-                isset($_POST['participant_ids']) && is_array($_POST['participant_ids'])) {
+                is_array($_POST['participant_ids'] ?? [])) {
                 
                 $itemId = (int)$_POST['item_id'];
-                $participantIds = array_filter($_POST['participant_ids'], 'is_numeric');
+                $participantIds = [];
+                foreach ($_POST['participant_ids'] ?? [] as $id) {
+                    $id = filter_var($id, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+                    if ($id === false) {
+                        $response['error'] = 'Invalid participant.';
+                        break 2;
+                    }
+                    $participantIds[] = $id;
+                }
+                $participantIds = array_values(array_unique($participantIds));
+                if (!isset($itemsMap[$itemId]) || array_diff($participantIds, array_column($participants, 'participant_id'))) {
+                    $response['error'] = 'Items and participants must belong to this bill.';
+                    break;
+                }
                 
                 // Begin transaction
                 $conn->begin_transaction();
@@ -186,7 +178,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $response = ['success' => true];
                 } catch (Exception $e) {
                     $conn->rollback();
-                    $response = ['success' => false, 'error' => $e->getMessage()];
+                    error_log('Assignment failed: ' . $e->getMessage());
+                    $response = ['success' => false, 'error' => 'Could not save the assignment.'];
                 }
             }
             break;
@@ -222,7 +215,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                     $response = ['success' => true];
                 } catch (Exception $e) {
                     $conn->rollback();
-                    $response = ['success' => false, 'error' => $e->getMessage()];
+                    error_log('Equal split failed: ' . $e->getMessage());
+                    $response = ['success' => false, 'error' => 'Could not split the bill.'];
                 }
             }
             break;
@@ -328,13 +322,13 @@ closeDbConnection($conn);
     <div class="row">
         <div class="col-lg-8">
             <!-- Imagen del ticket -->
-            <?php if (!empty($bill['receipt_image'])): ?>
+            <?php if (!empty($bill['image_path'])): ?>
             <div class="card mb-4">
                 <div class="card-header">
                     <h4>Receipt Image</h4>
                 </div>
                 <div class="card-body text-center">
-                    <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                    <img src="<?php echo htmlspecialchars(receiptUrl($bill)); ?>"
                          alt="Receipt" 
                          class="img-fluid" 
                          style="max-height: 500px; cursor: pointer;"
@@ -464,7 +458,7 @@ closeDbConnection($conn);
                             </div>
                         <?php else: ?>
                             <?php 
-                            $totalAssigned = array_sum(array_column($participantAmounts, 'amount'));
+                            $totalAssigned = array_sum(array_column($participantAmounts, 'amount_cents')) / 100;
                             foreach ($participantAmounts as $participantId => $data): 
                             ?>
                                 <div class="d-flex justify-content-between align-items-center mb-2 p-2 <?php echo $data['amount'] > 0 ? 'bg-light rounded' : ''; ?>">
@@ -518,7 +512,7 @@ closeDbConnection($conn);
 </div>
 
 <!-- Modal de imagen del recibo -->
-<?php if (!empty($bill['receipt_image'])): ?>
+<?php if (!empty($bill['image_path'])): ?>
 <div class="modal fade" id="receiptModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -527,7 +521,7 @@ closeDbConnection($conn);
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body text-center">
-                <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                <img src="<?php echo htmlspecialchars(receiptUrl($bill)); ?>"
                      alt="Receipt" 
                      class="img-fluid">
             </div>
@@ -553,7 +547,7 @@ closeDbConnection($conn);
                     <div class="mb-3">
                         <label for="participantEmail" class="form-label fw-bold text-dark">Email (optional)</label>
                         <input type="email" class="form-control" id="participantEmail">
-                        <div class="form-text text-dark">Email is used for sending payment reminders</div>
+                        <div class="form-text text-dark">Optional contact detail. No emails are sent.</div>
                     </div>
                 </form>
             </div>
@@ -612,6 +606,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const makeRequest = async (action, data = {}) => {
         const formData = new FormData();
         formData.append('action', action);
+        formData.append('csrf_token', document.querySelector('meta[name="csrf-token"]').content);
         
         Object.entries(data).forEach(([key, value]) => {
             if (Array.isArray(value)) {
@@ -624,6 +619,7 @@ document.addEventListener('DOMContentLoaded', function() {
         try {
             const response = await fetch(`split_bill.php?id=${billId}`, {
                 method: 'POST',
+                headers: { 'Accept': 'application/json' },
                 body: formData
             });
             return await response.json();
@@ -634,6 +630,10 @@ document.addEventListener('DOMContentLoaded', function() {
     };
     
     // Add participant
+    document.getElementById('addParticipantForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+        document.getElementById('saveParticipantBtn').click();
+    });
     document.getElementById('saveParticipantBtn').addEventListener('click', async function() {
         const name = document.getElementById('participantName').value.trim();
         const email = document.getElementById('participantEmail').value.trim();
@@ -649,7 +649,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Reload the page to refresh data
             location.reload();
         } else {
-            alert('Failed to add participant');
+            alert(data.error || 'Check the name and email, then try again.');
         }
     });
     
@@ -706,7 +706,7 @@ document.addEventListener('DOMContentLoaded', function() {
             // Reload to update amounts
             location.reload();
         } else {
-            alert('Failed to assign item');
+            alert(data.error || 'Failed to assign item');
         }
     });
     

@@ -3,23 +3,22 @@
             <div class="row">
                 <div class="col-md-4 mb-3 mb-md-0">
                     <h5 class="mb-3">BILL SPLITTER</h5>
-                    <p>Your one-stop solution to split bills effortlessly with friends and family. Upload your receipts, tag your friends, and let us do the math!</p>
+                    <p>Keep a receipt, assign items to people and calculate each person's share.</p>
                 </div>
                 
                 <div class="col-md-2 offset-md-1 mb-3 mb-md-0">
                     <h5 class="mb-3">QUICK LINKS</h5>
                     <ul class="list-unstyled">
                         <li><a href="<?php echo BASE_URL; ?>" class="text-light">Home</a></li>
-                        <li><a href="#how-it-works" class="text-light">How It Works</a></li>
+                        <li><a href="<?php echo BASE_URL; ?>/index.php#how-it-works" class="text-light">How It Works</a></li>
                         <li><a href="<?php echo BASE_URL; ?>/dashboard.php" class="text-light">Dashboard</a></li>
                         <li><a href="<?php echo BASE_URL; ?>/upload_receipt.php" class="text-light">Upload Receipt</a></li>
                     </ul>
                 </div>
                 
                 <div class="col-md-4 offset-md-1">
-                    <h5 class="mb-3">CONTACT US</h5>
-                    <p><a href="mailto:support@billsplitter.com" class="text-light">support@billsplitter.com</a></p>
-                    <p><a href="tel:+1234567890" class="text-light">+1 234 567 890</a></p>
+                    <h5 class="mb-3">SOURCE</h5>
+                    <p><a href="https://github.com/nachopalomares/billsplitter" class="text-light">View the code on GitHub</a></p>
                 </div>
             </div>
             
@@ -32,13 +31,6 @@
     </footer>
 
     <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-
-     <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- Custom JS -->
-    <script src="assets/js/participant-handler.js"></script>
     
     <!-- Page-specific scripts -->
     <?php if (isset($page_scripts)) echo $page_scripts; ?>

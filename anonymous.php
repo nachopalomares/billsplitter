@@ -2,13 +2,6 @@
 require_once 'config/config.php';
 require_once 'includes/functions.php';
 
-// Start session if not already started
-if (session_status() == PHP_SESSION_NONE) {
-    session_start();
-}
-
-// Set anonymous session
-$_SESSION['anonymous_user'] = true;
 ?>
 
 <?php include 'includes/header.php'; ?>
@@ -105,6 +98,7 @@ $_SESSION['anonymous_user'] = true;
     </div>
 </main>
 
+<script src="assets/js/money.js"></script>
 <script>
 let itemCount = 1;
 
@@ -196,15 +190,15 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
     const form = this;
     form.classList.remove('was-validated');
     
-    const peopleCount = parseInt(document.getElementById('people_count').value);
+    const peopleCount = Number(document.getElementById('people_count').value);
     
     // Collect items
     const items = [];
-    let totalAmount = 0;
+    let totalCents = 0;
     let isValid = true;
     
     // Validate people count
-    if (!peopleCount || peopleCount < 2 || peopleCount > 20) {
+    if (!Number.isInteger(peopleCount) || peopleCount < 2 || peopleCount > 20) {
         document.getElementById('people_count').classList.add('is-invalid');
         isValid = false;
     } else {
@@ -215,8 +209,9 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
     // Validate items
     document.querySelectorAll('.item-row').forEach(row => {
         const name = row.querySelector('.item-name').value.trim();
-        const price = parseFloat(row.querySelector('.item-price').value);
-        const quantity = parseInt(row.querySelector('.item-quantity').value);
+        const priceCents = BillMoney.toCents(row.querySelector('.item-price').value);
+        const price = priceCents === null ? NaN : priceCents / 100;
+        const quantity = Number(row.querySelector('.item-quantity').value);
         
         // Validate item name
         if (!name) {
@@ -237,7 +232,7 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
         }
         
         // Validate quantity
-        if (!quantity || quantity < 1) {
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
             row.querySelector('.item-quantity').classList.add('is-invalid');
             isValid = false;
         } else {
@@ -248,7 +243,7 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
         if (name && price > 0 && quantity > 0) {
             const itemTotal = price * quantity;
             items.push({ name, price, quantity, total: itemTotal });
-            totalAmount += itemTotal;
+            totalCents += priceCents * quantity;
         }
     });
     
@@ -263,7 +258,9 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
     }
     
     // Calculate split
-    const perPerson = totalAmount / peopleCount;
+    const split = BillMoney.split(totalCents, peopleCount);
+    const perPerson = split.base / 100;
+    const totalAmount = totalCents / 100;
     
     // Display results
     const resultsDiv = document.getElementById('results');
@@ -271,7 +268,9 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
     
     let itemsHtml = '';
     items.forEach(item => {
-        itemsHtml += `<p><strong>${item.name}</strong> - ${item.quantity}x $${item.price.toFixed(2)} = $${item.total.toFixed(2)}</p>`;
+        const name = document.createElement('span');
+        name.textContent = item.name;
+        itemsHtml += `<p><strong>${name.innerHTML}</strong> - ${item.quantity}x $${item.price.toFixed(2)} = $${item.total.toFixed(2)}</p>`;
     });
     
     detailsDiv.innerHTML = `
@@ -286,7 +285,7 @@ document.getElementById('anonymousBillForm').addEventListener('submit', function
                 <div class="alert alert-success">
                     <h4 class="alert-heading">Per Person</h4>
                     <h2 class="mb-0">$${perPerson.toFixed(2)}</h2>
-                    <small class="text-muted">for ${peopleCount} people</small>
+                    <small class="text-muted">${peopleCount - split.extra} people pay this amount${split.extra ? `; ${split.extra} pay $${((split.base + 1) / 100).toFixed(2)}` : ''}.</small>
                 </div>
             </div>
         </div>

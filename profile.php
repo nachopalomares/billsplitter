@@ -25,12 +25,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if ($action === 'update_profile') {
         // Update profile info
-        $email = trim($_POST['email']);
+        $email = trim(postString('email'));
         
         // Validate email
         if (empty($email)) {
             $errors[] = "Email is required";
-        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        } elseif (strlen($email) > 100 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors[] = "Invalid email format";
         }
         
@@ -61,9 +61,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     } elseif ($action === 'change_password') {
         // Change password
-        $current_password = $_POST['current_password'];
-        $new_password = $_POST['new_password'];
-        $confirm_password = $_POST['confirm_password'];
+        $current_password = postString('current_password');
+        $new_password = postString('new_password');
+        $confirm_password = postString('confirm_password');
         
         // Get current password hash
         $stmt = $conn->prepare("SELECT password_hash FROM users WHERE user_id = ?");
@@ -80,8 +80,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         
         if (empty($new_password)) {
             $errors[] = "New password is required";
-        } elseif (strlen($new_password) < 8) {
-            $errors[] = "New password must be at least 8 characters";
+        } elseif (strlen($new_password) < 8 || strlen($new_password) > 72) {
+            $errors[] = "New password must be between 8 and 72 bytes";
         }
         
         if ($new_password !== $confirm_password) {
@@ -178,6 +178,7 @@ ob_start();
                         <!-- Profile Information Tab -->
                         <div class="tab-pane fade show active" id="profile-info">
                             <form method="POST" action="profile.php">
+                                <?= csrfField() ?>
                                 <input type="hidden" name="action" value="update_profile">
                                 
                                 <div class="mb-3">
@@ -208,6 +209,7 @@ ob_start();
                         <!-- Change Password Tab -->
                         <div class="tab-pane fade" id="change-password">
                             <form method="POST" action="profile.php" id="password-form">
+                                <?= csrfField() ?>
                                 <input type="hidden" name="action" value="change_password">
                                 
                                 <div class="mb-3">
