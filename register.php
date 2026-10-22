@@ -8,10 +8,10 @@ $success = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // Get form data
-    $username = trim($_POST['username']);
-    $email = trim($_POST['email']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
+    $username = trim(postString('username'));
+    $email = trim(postString('email'));
+    $password = postString('password');
+    $confirm_password = postString('confirm_password');
     
     // Validate input
     if (empty($username)) {
@@ -22,14 +22,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     
     if (empty($email)) {
         $errors[] = "Email is required";
-    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+    } elseif (strlen($email) > 100 || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $errors[] = "Invalid email format";
     }
     
     if (empty($password)) {
         $errors[] = "Password is required";
-    } elseif (strlen($password) < 8) {
-        $errors[] = "Password must be at least 8 characters";
+    } elseif (strlen($password) < 8 || strlen($password) > 72) {
+        $errors[] = "Password must be between 8 and 72 bytes";
     }
     
     if ($password !== $confirm_password) {
@@ -93,6 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php endif; ?>
                         
                         <form method="POST" action="register.php">
+                            <?= csrfField() ?>
                             <div class="form-group mb-3">
                                 <label for="username">Username</label>
                                 <input type="text" class="form-control" id="username" name="username" value="<?php echo isset($username) ? htmlspecialchars($username) : ''; ?>">

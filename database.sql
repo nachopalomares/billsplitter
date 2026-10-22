@@ -1,3 +1,4 @@
+CREATE DATABASE IF NOT EXISTS bill_splitter CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE bill_splitter;
 
 CREATE TABLE users (
@@ -16,6 +17,7 @@ CREATE TABLE bills (
     bill_date DATETIME,
     total_amount DECIMAL(10,2),
     image_path VARCHAR(255),
+    share_token CHAR(64) NULL UNIQUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(user_id)
 );

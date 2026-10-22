@@ -14,18 +14,8 @@ if (!$billId) {
 // Get database connection
 $conn = getDbConnection();
 
-// Get bill details
-$billStmt = $conn->prepare("SELECT * FROM bills WHERE bill_id = ?");
-$billStmt->bind_param("i", $billId);
-$billStmt->execute();
-$billResult = $billStmt->get_result();
-
-if ($billResult->num_rows === 0) {
-    header('Location: dashboard.php');
-    exit;
-}
-
-$bill = $billResult->fetch_assoc();
+$bill = visibleBill($conn, $billId);
+$shareUrl = BASE_URL . '/view_bill.php?id=' . $billId . '&token=' . urlencode($bill['share_token']);
 
 // Get items
 $itemsStmt = $conn->prepare("SELECT * FROM bill_items WHERE bill_id = ? ORDER BY item_name");
@@ -45,26 +35,15 @@ $assignmentsStmt = $conn->prepare("
     FROM item_assignments ia
     JOIN participants p ON ia.participant_id = p.participant_id
     JOIN bill_items bi ON ia.item_id = bi.item_id
-    WHERE bi.bill_id = ?
+    WHERE bi.bill_id = ? AND p.bill_id = bi.bill_id
     ORDER BY bi.item_name, p.name
 ");
 $assignmentsStmt->bind_param("i", $billId);
 $assignmentsStmt->execute();
 $assignments = $assignmentsStmt->get_result()->fetch_all(MYSQLI_ASSOC);
 
-// Calculate amounts due
-$participantAmounts = [];
-foreach ($participants as $participant) {
-    $participantAmounts[$participant['participant_id']] = [
-        'name' => $participant['name'],
-        'amount' => 0
-    ];
-}
-
-foreach ($assignments as $assignment) {
-    $amount = ($assignment['price'] * $assignment['share_percentage']) / 100;
-    $participantAmounts[$assignment['participant_id']]['amount'] += $amount;
-}
+$itemsMap = array_column($items, null, 'item_id');
+$participantAmounts = calculateParticipantAmounts($itemsMap, $participants, $assignments);
 
 closeDbConnection($conn);
 ?>
@@ -159,7 +138,7 @@ closeDbConnection($conn);
                     <button class="btn btn-success" onclick="window.print()">
                         <i class="bi bi-printer"></i> Print
                     </button>
-                    <button class="btn btn-primary" onclick="copyBillLink()">
+                    <button class="btn btn-primary" onclick="copyBillLink(this)">
                         <i class="bi bi-share"></i> Share Link
                     </button>
                     <a href="split_bill.php?id=<?php echo $billId; ?>" class="btn btn-warning">
@@ -205,7 +184,7 @@ closeDbConnection($conn);
                         </div>
                     <?php else: ?>
                         <?php 
-                        $totalAssigned = array_sum(array_column($participantAmounts, 'amount'));
+                        $totalAssigned = array_sum(array_column($participantAmounts, 'amount_cents')) / 100;
                         foreach ($participantAmounts as $participantId => $data): 
                         ?>
                             <div class="participant-row">
@@ -294,11 +273,9 @@ closeDbConnection($conn);
                                                 $assignedNames = [];
                                                 foreach ($assignments as $assignment) {
                                                     if ($assignment['item_id'] == $item['item_id']) {
-                                                        $shareText = $assignment['share_percentage'] == 100 ? '' : 
-                                                                    " (" . $assignment['share_percentage'] . "%)";
                                                         $assignedNames[] = '<span class="badge bg-info text-dark me-1">' . 
                                                                           htmlspecialchars($assignment['participant_name']) . 
-                                                                          $shareText . '</span>';
+                                                                          '</span>';
                                                     }
                                                 }
                                                 
@@ -322,7 +299,7 @@ closeDbConnection($conn);
         <!-- Sidebar con imagen del ticket y herramientas para compartir -->
         <div class="col-lg-4">
             <!-- Imagen del recibo -->
-            <?php if (!empty($bill['receipt_image'])): ?>
+            <?php if (!empty($bill['image_path'])): ?>
             <div class="card mb-4">
                 <div class="card-header">
                     <h5 class="mb-0">
@@ -330,7 +307,7 @@ closeDbConnection($conn);
                     </h5>
                 </div>
                 <div class="card-body text-center">
-                    <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                    <img src="<?php echo htmlspecialchars(receiptUrl($bill)); ?>"
                          alt="Receipt" 
                          class="img-fluid receipt-image"
                          data-bs-toggle="modal" 
@@ -353,22 +330,13 @@ closeDbConnection($conn);
                         <label class="form-label small fw-bold">Share Link:</label>
                         <div class="input-group">
                             <input type="text" class="form-control" id="bill-url" 
-                                   value="<?php echo BASE_URL; ?>/view_bill.php?id=<?php echo $billId; ?>" readonly>
-                            <button class="btn btn-outline-primary" type="button" onclick="copyBillLink()">
+                                   value="<?php echo htmlspecialchars($shareUrl); ?>" readonly>
+                            <button class="btn btn-outline-primary" type="button" onclick="copyBillLink(this)" aria-label="Copy share link">
                                 <i class="bi bi-clipboard"></i>
                             </button>
                         </div>
                     </div>
                     
-                    <!-- QR Code placeholder -->
-                    <div class="text-center">
-                        <p class="small fw-bold mb-2">QR Code:</p>
-                        <div class="qr-code mx-auto">
-                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=<?php echo urlencode(BASE_URL . '/view_bill.php?id=' . $billId); ?>" 
-                                 alt="QR Code" class="img-fluid">
-                        </div>
-                        <p class="text-muted small mt-2">Scan to view bill</p>
-                    </div>
                 </div>
             </div>
 
@@ -395,7 +363,7 @@ closeDbConnection($conn);
 </div>
 
 <!-- Modal para imagen del recibo -->
-<?php if (!empty($bill['receipt_image'])): ?>
+<?php if (!empty($bill['image_path'])): ?>
 <div class="modal fade" id="receiptModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -404,7 +372,7 @@ closeDbConnection($conn);
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body text-center">
-                <img src="<?php echo htmlspecialchars($bill['receipt_image']); ?>" 
+                <img src="<?php echo htmlspecialchars(receiptUrl($bill)); ?>"
                      alt="Receipt" 
                      class="img-fluid">
             </div>
@@ -414,16 +382,17 @@ closeDbConnection($conn);
 <?php endif; ?>
 
 <script>
-function copyBillLink() {
+function copyBillLink(button) {
     const urlInput = document.getElementById('bill-url');
     urlInput.select();
     urlInput.setSelectionRange(0, 99999); // For mobile devices
     
     try {
-        document.execCommand('copy');
+        if (!document.execCommand('copy')) {
+            throw new Error('Copy was not supported.');
+        }
         
         // Show visual feedback
-        const button = event.target.closest('button');
         const originalHTML = button.innerHTML;
         button.innerHTML = '<i class="bi bi-check"></i>';
         button.classList.add('btn-success');

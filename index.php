@@ -13,8 +13,6 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
 ?>
 <?php include 'includes/header.php'; ?>
 
-<!-- Incluir CSS específico para la página de inicio -->
-<link rel="stylesheet" href="assets/css/style.css">
 
 <main>
     <!-- Enhanced Hero Section -->
@@ -33,14 +31,14 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
                             <div class="row g-3">
                                 <div class="col-6">
                                     <div class="stat-card text-center p-3 bg-light rounded">
-                                        <h3 class="text-primary mb-1"><?= number_format($stats['bills']) ?></h3>
-                                        <p class="small text-muted mb-0">Bills Split</p>
+                                        <h3 class="text-primary mb-1"><?= $stats['bills'] === null ? 'Unavailable' : number_format($stats['bills']) ?></h3>
+                                        <p class="small text-muted mb-0">Saved bills</p>
                                     </div>
                                 </div>
                                 <div class="col-6">
                                     <div class="stat-card text-center p-3 bg-light rounded">
-                                        <h3 class="text-success mb-1"><?= number_format($stats['users']) ?></h3>
-                                        <p class="small text-muted mb-0">Happy Users</p>
+                                        <h3 class="text-success mb-1"><?= $stats['users'] === null ? 'Unavailable' : number_format($stats['users']) ?></h3>
+                                        <p class="small text-muted mb-0">Registered accounts</p>
                                     </div>
                                 </div>
                             </div>
@@ -75,7 +73,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
                     <div class="receipt-mockup shadow-lg">
                         <div class="receipt-header bg-white p-3 border-bottom">
                             <div class="d-flex justify-content-between align-items-center">
-                                <h4 class="mb-0 text-dark">Bistro Avenue</h4>
+                                <h4 class="mb-0 text-dark">Example receipt</h4>
                                 <span class="badge bg-success">Split Ready</span>
                             </div>
                             <p class="text-muted small mb-0">Date: <?php echo date('d/m/Y'); ?></p>
@@ -122,10 +120,10 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
                             
                             <div class="split-results">
                                 <div class="alert alert-success mb-2">
-                                    <strong>John owes:</strong> $20.99
+                                    <strong>John owes:</strong> $22.99
                                 </div>
                                 <div class="alert alert-info mb-0">
-                                    <strong>Sarah owes:</strong> $17.49
+                                    <strong>Sarah owes:</strong> $15.49
                                 </div>
                             </div>
                         </div>
@@ -187,7 +185,7 @@ $isLoggedIn = isset($_SESSION['user_id']) && !empty($_SESSION['user_id']);
                                 </div>
                             </div>
                             <h4 class="card-title">3. Share Results</h4>
-                            <p class="card-text text-muted">Send everyone their share via email, SMS, or payment apps</p>
+                            <p class="card-text text-muted">Copy a read-only link so the group can see the bill and each person's share</p>
                             <?php if ($isLoggedIn): ?>
                                 <a href="dashboard.php" class="btn btn-outline-info btn-sm">View Dashboard</a>
                             <?php endif; ?>

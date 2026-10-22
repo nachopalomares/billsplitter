@@ -1,9 +1,6 @@
 <?php
 require_once 'config/config.php';
-require_once 'config/db_connect.php';
 require_once 'includes/functions.php';
-
-// Require login
 requireLogin();
 
 $errors = [];
@@ -11,121 +8,126 @@ $uploadSuccess = false;
 $uploadedImage = null;
 $billId = null;
 
-// Handle image upload
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_FILES['receipt_image'])) {
-    if ($_FILES['receipt_image']['error'] === UPLOAD_ERR_OK) {
-        $allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
-        $fileType = $_FILES['receipt_image']['type'];
-        
-        if (!in_array($fileType, $allowedTypes)) {
-            $errors[] = "Invalid file type. Only JPG and PNG are allowed.";
+    $file = $_FILES['receipt_image'];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        $errors[] = 'The upload failed. Choose a JPG or PNG file up to 5 MB.';
+    } elseif ($file['size'] > MAX_RECEIPT_SIZE) {
+        $errors[] = 'The receipt must be no larger than 5 MB.';
+    } else {
+        $types = ['image/jpeg' => 'jpg', 'image/png' => 'png'];
+        $mime = (new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);
+        if (!isset($types[$mime]) || !getimagesize($file['tmp_name'])) {
+            $errors[] = 'Invalid image. Only JPG and PNG are allowed.';
         } else {
-            // Create uploads directory if it doesn't exist
-            if (!file_exists(UPLOAD_DIR)) {
-                mkdir(UPLOAD_DIR, 0755, true);
-            }
-            
-            // Generate unique filename
-            $fileName = uniqid('receipt_') . '_' . time() . '.' . pathinfo($_FILES['receipt_image']['name'], PATHINFO_EXTENSION);
-            $uploadPath = UPLOAD_DIR . $fileName;
-            
-            if (move_uploaded_file($_FILES['receipt_image']['tmp_name'], $uploadPath)) {
-                // Create bill entry with just the image
-                $conn = getDbConnection();
-                $userId = $_SESSION['user_id'];
-                
-                // Insert bill with placeholder data
-                $stmt = $conn->prepare("
-                    INSERT INTO bills (user_id, restaurant_name, total_amount, image_path, bill_date) 
-                    VALUES (?, ?, ?, ?, NOW())
-                ");
-                $restaurantName = "New Receipt"; // Placeholder
-                $totalAmount = 0; // Will be calculated when items are added
-                $stmt->bind_param("isds", $userId, $restaurantName, $totalAmount, $fileName);
-                
-                if ($stmt->execute()) {
-                    $billId = $conn->insert_id;
-                    $uploadSuccess = true;
-                    $uploadedImage = $fileName;
-                } else {
-                    $errors[] = "Failed to save receipt: " . $conn->error;
+            $uploadPath = null;
+            try {
+                if (!is_dir(UPLOAD_DIR) && !mkdir(UPLOAD_DIR, 0700, true) && !is_dir(UPLOAD_DIR)) {
+                    throw new RuntimeException('Could not create the receipt directory.');
                 }
-                
+                $fileName = bin2hex(random_bytes(16)) . '.' . $types[$mime];
+                $uploadPath = UPLOAD_DIR . $fileName;
+                if (!move_uploaded_file($file['tmp_name'], $uploadPath)) {
+                    throw new RuntimeException('Could not move the uploaded image.');
+                }
+                $conn = getDbConnection();
+                $stmt = $conn->prepare("INSERT INTO bills (user_id, restaurant_name, total_amount, image_path, bill_date) VALUES (?, 'New Receipt', 0, ?, NOW())");
+                $stmt->bind_param('is', $_SESSION['user_id'], $fileName);
+                $stmt->execute();
+                $billId = $conn->insert_id;
                 $stmt->close();
                 closeDbConnection($conn);
-            } else {
-                $errors[] = "Failed to upload file";
+                $uploadSuccess = true;
+                $uploadedImage = $fileName;
+            } catch (Throwable $error) {
+                if ($uploadPath && is_file($uploadPath)) {
+                    unlink($uploadPath);
+                }
+                error_log('Receipt upload failed: ' . $error->getMessage());
+                $errors[] = 'Could not save the receipt. Please try again.';
             }
         }
-    } else {
-        $errors[] = "File upload error: " . $_FILES['receipt_image']['error'];
     }
 }
 
-// Handle manual item entry
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isset($_POST['bill_id'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items'], $_POST['bill_id'])) {
     $billId = (int)$_POST['bill_id'];
-    $restaurantName = sanitizeInput($_POST['restaurant_name']);
+    $restaurantName = trim(postString('restaurant_name'));
     $items = $_POST['items'] ?? [];
-    
-    if (empty($restaurantName)) {
-        $errors[] = "Please enter a restaurant name.";
-    }
-    
-    if (empty($items)) {
-        $errors[] = "Please add at least one item.";
-    }
-    
-    if (empty($errors)) {
-        $conn = getDbConnection();
-        
-        // Update restaurant name and calculate total
-        $totalAmount = 0;
-        foreach ($items as $item) {
-            if (!empty($item['name']) && !empty($item['price']) && $item['price'] > 0) {
-                $quantity = max(1, (int)($item['quantity'] ?? 1));
-                $price = (float)$item['price'];
-                $totalAmount += $price * $quantity;
-            }
+    $conn = getDbConnection();
+    $conn->begin_transaction();
+    try {
+        $stmt = $conn->prepare('SELECT * FROM bills WHERE bill_id = ? AND user_id = ? FOR UPDATE');
+        $stmt->bind_param('ii', $billId, $_SESSION['user_id']);
+        $stmt->execute();
+        $bill = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+        if (!$bill) {
+            throw new InvalidArgumentException('Bill not found or access denied.');
         }
-        
-        // Update bill
-        $stmt = $conn->prepare("UPDATE bills SET restaurant_name = ?, total_amount = ? WHERE bill_id = ? AND user_id = ?");
-        $stmt->bind_param("sdii", $restaurantName, $totalAmount, $billId, $_SESSION['user_id']);
+        $uploadedImage = $bill['image_path'];
+        $uploadSuccess = true;
+        if ($restaurantName === '' || strlen($restaurantName) > 100) {
+            throw new InvalidArgumentException('The restaurant name is missing or too long.');
+        }
+        if (!is_array($items) || count($items) < 1 || count($items) > 100) {
+            throw new InvalidArgumentException('Enter between 1 and 100 item rows.');
+        }
+        $validated = [];
+        $totalCents = 0;
+        $unitCount = 0;
+        foreach ($items as $item) {
+            if (!is_array($item) || !is_string($item['name'] ?? null)) {
+                throw new InvalidArgumentException('Each item needs a name, quantity and price.');
+            }
+            $name = trim($item['name']);
+            $quantity = filter_var($item['quantity'] ?? 1, FILTER_VALIDATE_INT,
+                ['options' => ['min_range' => 1, 'max_range' => 100]]);
+            $cents = moneyToCents($item['price'] ?? '');
+            if ($name === '' || strlen($name) > 100 || $quantity === false || $cents === 0) {
+                throw new InvalidArgumentException('Check the item name, positive price and quantity (1 to 100).');
+            }
+            $unitCount += $quantity;
+            $totalCents += $cents * $quantity;
+            if ($unitCount > 1000 || $totalCents > 9999999999) {
+                throw new InvalidArgumentException('The bill exceeds the item or amount limit.');
+            }
+            $validated[] = ['name' => $name, 'quantity' => $quantity, 'price' => $cents / 100];
+        }
+        $totalAmount = $totalCents / 100;
+        $stmt = $conn->prepare('UPDATE bills SET restaurant_name = ?, total_amount = ? WHERE bill_id = ? AND user_id = ?');
+        $stmt->bind_param('sdii', $restaurantName, $totalAmount, $billId, $_SESSION['user_id']);
         $stmt->execute();
         $stmt->close();
-        
-        // Clear existing items and insert new ones
-        $stmt = $conn->prepare("DELETE FROM bill_items WHERE bill_id = ?");
-        $stmt->bind_param("i", $billId);
+        $stmt = $conn->prepare('DELETE FROM bill_items WHERE bill_id = ?');
+        $stmt->bind_param('i', $billId);
         $stmt->execute();
         $stmt->close();
-        
-        // Insert new items
-        $itemStmt = $conn->prepare("INSERT INTO bill_items (bill_id, item_name, price) VALUES (?, ?, ?)");
-        
-        foreach ($items as $item) {
-            if (!empty($item['name']) && !empty($item['price']) && $item['price'] > 0) {
-                $quantity = max(1, (int)($item['quantity'] ?? 1));
-                $price = (float)$item['price'];
-                $itemName = sanitizeInput($item['name']);
-                
-                // Insert item for each quantity (to maintain current DB structure)
-                for ($i = 0; $i < $quantity; $i++) {
-                    $itemStmt->bind_param("isd", $billId, $itemName, $price);
-                    $itemStmt->execute();
-                }
+        $stmt = $conn->prepare('INSERT INTO bill_items (bill_id, item_name, price) VALUES (?, ?, ?)');
+        foreach ($validated as $item) {
+            for ($i = 0; $i < $item['quantity']; $i++) {
+                $stmt->bind_param('isd', $billId, $item['name'], $item['price']);
+                $stmt->execute();
             }
         }
-        
-        $itemStmt->close();
+        $stmt->close();
+        $conn->commit();
         closeDbConnection($conn);
-        
-        // Redirect to split bill page
-        $_SESSION['upload_success'] = true;
-        header("Location: split_bill.php?id=" . $billId);
+        header('Location: split_bill.php?id=' . $billId);
         exit;
+    } catch (InvalidArgumentException $error) {
+        $conn->rollback();
+        $errors[] = $error->getMessage();
+    } catch (Throwable $error) {
+        $conn->rollback();
+        error_log('Saving bill items failed: ' . $error->getMessage());
+        $errors[] = 'Could not save the items. Existing bill data has been kept.';
     }
+    closeDbConnection($conn);
+}
+$formItems = [['name' => '', 'quantity' => '1', 'price' => '']];
+if ($uploadSuccess && is_array($_POST['items'] ?? null)) {
+    $formItems = array_values(array_filter(array_slice($_POST['items'], 0, 100), 'is_array')) ?: $formItems;
 }
 ?>
 
@@ -153,11 +155,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                     <?php endif; ?>
                     
                     <form method="POST" enctype="multipart/form-data">
+                        <?= csrfField() ?>
                         <div class="mb-3">
                             <label for="receipt_image" class="form-label">Receipt Image</label>
                             <input type="file" class="form-control" id="receipt_image" name="receipt_image" 
                                    accept="image/jpeg,image/jpg,image/png" required>
-                            <div class="form-text">Upload a clear photo of your receipt. You'll manually enter the items afterwards.</div>
+                            <div class="form-text">JPG or PNG, up to 5 MB. You'll enter the items manually afterwards.</div>
                         </div>
                         
                         <div class="d-grid">
@@ -182,15 +185,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                             <?php 
                             
                             $imagePath = UPLOAD_DIR . $uploadedImage;
-                            $webPath = 'uploads/' . $uploadedImage;
+                            $webPath = BASE_URL . '/receipt.php?id=' . (int)$billId;
                             
-                            echo "<!-- Debug Info:\n";
-                            echo "UPLOAD_DIR: " . UPLOAD_DIR . "\n";
-                            echo "uploadedImage: " . $uploadedImage . "\n";
-                            echo "imagePath: " . $imagePath . "\n";
-                            echo "webPath: " . $webPath . "\n";
-                            echo "File exists: " . (file_exists($imagePath) ? 'YES' : 'NO') . "\n";
-                            echo "-->";
                             
                             if (file_exists($imagePath)): 
                             ?>
@@ -208,7 +204,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                                 <div class="alert alert-warning">
                                     <i class="bi bi-exclamation-triangle"></i> Image file not found
                                 </div>
-                                <p class="text-muted">Expected path: <?php echo htmlspecialchars($imagePath); ?></p>
                             <?php endif; ?>
                             <p class="text-muted mt-2">Use this image as reference to enter the items manually</p>
                         </div>
@@ -223,31 +218,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                         </div>
                         <div class="card-body">
                             <form method="POST" id="itemsForm">
+                                <?= csrfField() ?>
+                                <?php foreach ($errors as $error): ?>
+                                    <div class="alert alert-danger"><?= htmlspecialchars($error) ?></div>
+                                <?php endforeach; ?>
                                 <input type="hidden" name="save_items" value="1">
                                 <input type="hidden" name="bill_id" value="<?php echo $billId; ?>">
                                 
                                 <div class="mb-3">
                                     <label for="restaurant_name" class="form-label">Restaurant/Store Name</label>
                                     <input type="text" class="form-control" id="restaurant_name" name="restaurant_name" 
-                                           placeholder="Enter restaurant or store name" required>
+                                           placeholder="Enter restaurant or store name" value="<?= htmlspecialchars(postString('restaurant_name')) ?>" maxlength="100" required>
                                 </div>
                                 
                                 <div class="mb-3">
                                     <label class="form-label">Items</label>
                                     <div id="items-container">
-                                        <!-- Initial item row -->
+                                        <?php foreach ($formItems as $index => $formItem): ?>
                                         <div class="row mb-2 item-row">
                                             <div class="col-4">
-                                                <input type="text" class="form-control" name="items[0][name]" 
-                                                       placeholder="Item name" required>
+                                                <input type="text" class="form-control" name="items[<?= $index ?>][name]"
+                                                       value="<?= htmlspecialchars(is_string($formItem['name'] ?? null) ? $formItem['name'] : '') ?>" placeholder="Item name" maxlength="100" required>
                                             </div>
                                             <div class="col-2">
-                                                <input type="number" class="form-control" name="items[0][quantity]" 
-                                                       placeholder="Qty" min="1" value="1">
+                                                <input type="number" class="form-control" name="items[<?= $index ?>][quantity]"
+                                                       placeholder="Qty" min="1" max="100" value="<?= htmlspecialchars(is_scalar($formItem['quantity'] ?? null) ? (string)$formItem['quantity'] : '1') ?>">
                                             </div>
                                             <div class="col-3">
-                                                <input type="number" class="form-control price-input" name="items[0][price]" 
-                                                       placeholder="Price" step="0.01" min="0.01" required>
+                                                <input type="number" class="form-control price-input" name="items[<?= $index ?>][price]"
+                                                       value="<?= htmlspecialchars(is_scalar($formItem['price'] ?? null) ? (string)$formItem['price'] : '') ?>" placeholder="Price" step="0.01" min="0.01" required>
                                             </div>
                                             <div class="col-2">
                                                 <button type="button" class="btn btn-outline-danger btn-sm remove-item w-100">
@@ -255,6 +254,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
                                                 </button>
                                             </div>
                                         </div>
+                                        <?php endforeach; ?>
                                     </div>
                                     
                                     <button type="button" class="btn btn-outline-primary btn-sm mt-2" id="add-item">
@@ -289,7 +289,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_items']) && isse
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-    let itemCount = 1;
+    if (!document.getElementById('itemsForm')) return;
+    let itemCount = <?= count($formItems) ?>;
     
     function updateTotal() {
         let total = 0;

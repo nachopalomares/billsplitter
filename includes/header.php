@@ -9,6 +9,7 @@
     
     <!-- Base URL for JavaScript -->
     <meta name="base-url" content="<?php echo BASE_URL; ?>">
+    <meta name="csrf-token" content="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
     
 
     <!-- Fonts - Using Inter for better readability -->
@@ -26,7 +27,6 @@
     <link rel="stylesheet" href="assets/css/style.css">
     
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="<?php echo BASE_URL; ?>/assets/favicon.ico">
     
     <!-- Meta tags -->
     <meta name="description" content="Split bills fairly with friends using our smart bill splitter app. Upload receipts, tag participants, and calculate everyone's share instantly.">
@@ -61,7 +61,7 @@
                             </a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#how-it-works">
+                            <a class="nav-link" href="<?php echo BASE_URL; ?>/index.php#how-it-works">
                                 <i class="bi bi-info-circle me-1"></i> How It Works
                             </a>
                         </li>
@@ -96,9 +96,12 @@
                                         <i class="bi bi-person me-2"></i> Profile
                                     </a>
                                     <hr class="my-2">
-                                    <a class="custom-menu-item d-flex align-items-center text-danger" href="<?php echo BASE_URL; ?>/logout.php">
-                                        <i class="bi bi-box-arrow-right me-2"></i> Logout
-                                    </a>
+                                    <form method="POST" action="<?php echo BASE_URL; ?>/logout.php">
+                                        <?= csrfField() ?>
+                                        <button type="submit" class="custom-menu-item d-flex align-items-center text-danger bg-transparent border-0 w-100">
+                                            <i class="bi bi-box-arrow-right me-2"></i> Logout
+                                        </button>
+                                    </form>
                                 </div>
                             </div>
                         <?php else: ?>
